@@ -642,7 +642,7 @@ test("libass burns a fonts.css font that fonts.css calls otherwise than its file
   if (!takes) {
     // As on the hosted worker's static 9.0.2, whose libass drew Noto Sans in its place while the run named Inter.
     assert.equal(r.status, 1, r.stdout);
-    assert.equal(r.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/inter-latin-400.woff2, a font file fonts.css gives for Kit Inter: it said \"Error opening memory font 'inter-latin-400.woff2'\". Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does");
+    assert.equal(r.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/inter-latin-400.woff2, a font file fonts.css gives for Kit Inter: it said \"Error opening memory font 'inter-latin-400.woff2'\". Give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
     assert.doesNotMatch(r.stderr, /Drawing/);
     assert.equal(r.stdout, "");
     assert.equal(fs.existsSync(folder), false);
@@ -732,7 +732,7 @@ test("a font file of fonts.css that libass cannot open, of a face captions.ass d
   // The bold's two files, on every ffmpeg: not Inter's 400, which a libass that opens no WOFF2 file cannot open either,
   // nor the italic. libass named them by the names the run gave them in its folder, font.woff2 and font.ttf, which are
   // no files of the user's, so its words are not given.
-  const message = "This ffmpeg's libass cannot use files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter. Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does";
+  const message = "This ffmpeg's libass cannot use files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter. Give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does. Where Chrome starts here, leave out --libass to have Chrome draw the captions";
   assert.deepEqual(JSON.parse(r.stdout), { ok: false, error: message });
   assert.equal(r.stderr, `easycaptionkit: ${message}\n`);
   assert.equal(fs.existsSync(out("unopened")), false);
@@ -742,7 +742,7 @@ test("a font file of fonts.css that libass cannot open, of a face captions.ass d
   fs.writeFileSync(path.join(cut, "fonts.css"), face("cut.ttf", 700, "normal"));
   const c = h.run([video, "--words", words, "--fonts", cut, "--libass", "--out", out("cut-font")], env);
   assert.equal(c.status, 1, c.stdout);
-  assert.equal(c.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/cut.ttf, a font file fonts.css gives for Inter: it said \"Error opening memory font 'cut.ttf'\". Leave out --libass to have Chrome draw the captions, or give fonts.css a file of the font that libass can use");
+  assert.equal(c.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/cut.ttf, a font file fonts.css gives for Inter: it said \"Error opening memory font 'cut.ttf'\". Give fonts.css a file of the font that libass can use. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
   assert.equal(fs.existsSync(out("cut-font")), false);
   // Past three files, how many more, as for a family a site splits into a file for each set of letters; libass's words
   // for the first that went to it by its own name.
@@ -754,7 +754,7 @@ test("a font file of fonts.css that libass cannot open, of a face captions.ass d
   });
   const m = h.run([video, "--words", words, "--fonts", many, "--libass", "--out", out("many-cut")], env);
   assert.equal(m.status, 1, m.stdout);
-  assert.equal(m.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/.a.woff2, files/b.woff2, files/c.woff2 and 1 more, font files fonts.css gives for Inter: it said \"Error opening memory font 'b.woff2'\". Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does");
+  assert.equal(m.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/.a.woff2, files/b.woff2, files/c.woff2 and 1 more, font files fonts.css gives for Inter: it said \"Error opening memory font 'b.woff2'\". Give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
   assert.equal(fs.existsSync(out("many-cut")), false);
   // The italic alone beside Inter's 400, which draws the captions, stops nothing: the run burns that 400, the WOFF2 file
   // a site serves, or the same font as a TrueType file where this ffmpeg's libass opens no WOFF2 file.
@@ -789,19 +789,19 @@ test("a font file of fonts.css that libass opens and cannot use, as one with no 
   const ttf = fs.readFileSync(path.join(h.FIXTURES, "inter-latin-400.ttf"));
   const nameless = Buffer.from(ttf);
   for (let i = 0; i < nameless.readUInt16BE(4); i++) if (nameless.toString("latin1", 12 + i * 16, 16 + i * 16) === "name") nameless.writeUInt16BE(0, nameless.readUInt32BE(20 + i * 16) + 2);
-  assert.equal(stopped(kitWith("kit-nameless", "nameless.ttf", nameless), "nameless"), "easycaptionkit: This ffmpeg's libass cannot use files/nameless.ttf, a font file fonts.css gives for Kitfont: it said \"Error getting metadata for embedded font 'nameless.ttf'\". Leave out --libass to have Chrome draw the captions, or give fonts.css a file of the font that libass can use");
+  assert.equal(stopped(kitWith("kit-nameless", "nameless.ttf", nameless), "nameless"), "easycaptionkit: This ffmpeg's libass cannot use files/nameless.ttf, a font file fonts.css gives for Kitfont: it said \"Error getting metadata for embedded font 'nameless.ttf'\". Give fonts.css a file of the font that libass can use. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
   // The same file past 64 MB, which easycaptionkit reads no font from and does not give libass, and a file that does not
   // start as a font file does.
   const huge = kitWith("kit-huge", "huge.ttf", ttf);
   fs.truncateSync(path.join(huge, "files", "huge.ttf"), 65 * 1024 * 1024);
-  assert.equal(stopped(huge, "huge"), "easycaptionkit: libass cannot be given files/huge.ttf, a font file fonts.css gives for Kitfont: it is past 64 MB, and easycaptionkit gives libass no such file. Leave out --libass to have Chrome draw the captions, or give fonts.css another file of the font");
-  assert.equal(stopped(kitWith("kit-movie", "movie.ttf", Buffer.alloc(4096)), "movie"), "easycaptionkit: libass cannot be given files/movie.ttf, a font file fonts.css gives for Kitfont: it does not start as a font file does, and easycaptionkit gives libass no such file. Leave out --libass to have Chrome draw the captions, or give fonts.css another file of the font");
+  assert.equal(stopped(huge, "huge"), "easycaptionkit: libass cannot be given files/huge.ttf, a font file fonts.css gives for Kitfont: it is past 64 MB, and easycaptionkit gives libass no such file. Give fonts.css another file of the font. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
+  assert.equal(stopped(kitWith("kit-movie", "movie.ttf", Buffer.alloc(4096)), "movie"), "easycaptionkit: libass cannot be given files/movie.ttf, a font file fonts.css gives for Kitfont: it does not start as a font file does, and easycaptionkit gives libass no such file. Give fonts.css another file of the font. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
   // A font file this user may not read.
   if (process.getuid && process.getuid() !== 0) {
     const locked = kitWith("kit-locked", "locked.ttf", ttf);
     fs.chmodSync(path.join(locked, "files", "locked.ttf"), 0o000);
     try {
-      assert.equal(stopped(locked, "locked"), "easycaptionkit: libass cannot be given files/locked.ttf, a font file fonts.css gives for Kitfont: it cannot be read, and easycaptionkit gives libass no such file. Leave out --libass to have Chrome draw the captions, or give fonts.css another file of the font");
+      assert.equal(stopped(locked, "locked"), "easycaptionkit: libass cannot be given files/locked.ttf, a font file fonts.css gives for Kitfont: it cannot be read, and easycaptionkit gives libass no such file. Give fonts.css another file of the font. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
     } finally {
       fs.chmodSync(path.join(locked, "files", "locked.ttf"), 0o644);
     }
@@ -1908,7 +1908,7 @@ test("a Chrome that cannot start its sandbox stops the run before the encode and
   const words = h.write("broken-chrome.json", { words: h.evenWords("drawn without a sandbox", { start: 0.2 }) });
   const stopped = h.run([video, "--words", words, "--out", out("broken-chrome-run")], env);
   assert.equal(stopped.status, 1);
-  assert.match(stopped.stderr, /Chrome stopped \(exit 1\): Chrome could not start its sandbox here \(No usable sandbox! Update your kernel or see the docs\.\)\. Pass --libass to have ffmpeg draw the captions without Chrome\n/);
+  assert.match(stopped.stderr, /Chrome stopped \(exit 1\): Chrome could not start its sandbox here \(No usable sandbox! Update your kernel or see the docs\.\)\. Pass --libass to have ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts\.css\n/);
   assert.doesNotMatch(stopped.stderr, /Encoding/);
   assert.equal(fs.existsSync(out("broken-chrome-run")), false);
   // A Chrome with no #! line, which Linux has /bin/sh run, that answered when asked its version, stopped for its
@@ -1921,7 +1921,7 @@ test("a Chrome that cannot start its sandbox stops the run before the encode and
     const unmarkedEnv = { env: { ...process.env, CHROME_PATH: unmarked } };
     const plain = h.run([video, "--words", words, "--out", out("unmarked-chrome-run")], unmarkedEnv);
     assert.equal(plain.status, 1);
-    assert.match(plain.stderr, /\neasycaptionkit: Chrome stopped \(exit 1\): Chrome could not start its sandbox here \(No usable sandbox! Update your kernel or see the docs\.\)\. Pass --libass to have ffmpeg draw the captions without Chrome\n$/);
+    assert.match(plain.stderr, /\neasycaptionkit: Chrome stopped \(exit 1\): Chrome could not start its sandbox here \(No usable sandbox! Update your kernel or see the docs\.\)\. Pass --libass to have ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts\.css\n$/);
     if (/ subtitles /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) {
       const drawn = caption([video, "--words", words, "--libass", "--out", out("unmarked-chrome-libass")], unmarkedEnv);
       assert.ok(drawn.notes.some((n) => sandboxNote.test(n)), drawn.notes.join(" | "));
@@ -1933,7 +1933,7 @@ test("a Chrome that cannot start its sandbox stops the run before the encode and
   fs.writeFileSync(killed, "#!/bin/sh\n[ \"$1\" = --version ] && { echo 'Chromium 140.0.0.0, a stand-in'; exit 0; }\nkill -KILL $$\n", { mode: 0o755 });
   const oom = h.run([video, "--words", words, "--out", out("killed-chrome-run")], { env: { ...process.env, CHROME_PATH: killed } });
   assert.equal(oom.status, 1);
-  assert.match(oom.stderr, /\neasycaptionkit: Chrome was stopped by SIGKILL, as the system stops a program when memory runs out\. Run again with fewer jobs at once or with a smaller video, or pass --libass to have ffmpeg draw the captions without Chrome\n$/);
+  assert.match(oom.stderr, /\neasycaptionkit: Chrome was stopped by SIGKILL, as the system stops a program when memory runs out\. Run again with fewer jobs at once or with a smaller video, or pass --libass to have ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts\.css\n$/);
   assert.equal(fs.existsSync(out("killed-chrome-run")), false);
   if (!/ subtitles /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return;
   const c = caption([video, "--words", words, "--libass", "--out", out("broken-chrome-libass")], env);
@@ -1996,7 +1996,7 @@ chrome.on("exit", () => process.kill(process.pid, "SIGKILL"));
     fs.rmSync(count, { force: true });
     const r = h.run([video, "--words", words, "--out", out(`dying-chrome-${json}`), ...(json ? ["--json"] : [])], envAt(1));
     assert.equal(r.status, 1, r.stderr);
-    assert.match(r.stderr, /easycaptionkit: Chrome was stopped by SIGKILL, as the system stops a program when memory runs out\. Run again with fewer jobs at once or with a smaller video, or pass --libass to have ffmpeg draw the captions without Chrome\n$/);
+    assert.match(r.stderr, /easycaptionkit: Chrome was stopped by SIGKILL, as the system stops a program when memory runs out\. Run again with fewer jobs at once or with a smaller video, or pass --libass to have ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts\.css\n$/);
     if (json) assert.equal(JSON.parse(r.stdout).ok, false);
     assert.equal(fs.existsSync(out(`dying-chrome-${json}`)), false);
   }

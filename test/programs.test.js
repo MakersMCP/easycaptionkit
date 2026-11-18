@@ -14,7 +14,7 @@ const { run, write, video, dir, notOnPath, hasFfmpeg, evenWords, CLI } = require
 const programs = require("../skills/easycaptionkit/scripts/lib/programs");
 
 const INSTALL = "brew install ffmpeg, sudo apt install ffmpeg or winget install ffmpeg";
-const LIBASS = "--libass has ffmpeg draw the captions without Chrome.";
+const LIBASS = "--libass has ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts.css.";
 // How each message ends: for a program a variable names, and for one found.
 const ADVICE = {
   FFMPEG_PATH: `Set FFMPEG_PATH to an ffmpeg that runs, or unset it and install one (${INSTALL}).`,
@@ -626,9 +626,10 @@ test("a program a run checked that the system cannot start during the work says 
     return file;
   };
   // A Chrome that gives its version and may not be run after, so it cannot be started to draw: its message ends with
-  // one full stop before the advice to pass --libass.
+  // one full stop before the advice to pass --libass, which draws without Chrome where this ffmpeg's libass can use the
+  // font files of fonts.css.
   const chrome = standIn("lost-chrome/chrome", '#!/bin/sh\nif [ "$1" = --version ]; then echo "Chromium 140.0.0.0, a stand-in"; chmod 644 "$0"; exit 0; fi\nexit 1\n');
-  refused({ CHROME_PATH: chrome, FFMPEG_PATH: file, FFPROBE_PATH: real("ffprobe") }, [clip, "--words", words], `easycaptionkit could not start Chrome, ${chrome}, again: permission denied. Check that it is still there and may be run, and run easycaptionkit again. Pass --libass to have ffmpeg draw the captions without Chrome`);
+  refused({ CHROME_PATH: chrome, FFMPEG_PATH: file, FFPROBE_PATH: real("ffprobe") }, [clip, "--words", words], `easycaptionkit could not start Chrome, ${chrome}, again: permission denied. Check that it is still there and may be run, and run easycaptionkit again. Pass --libass to have ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts.css`);
   // An ffmpeg that answers when the run begins and may not be run once libass has been asked how it draws colors, so
   // the encode cannot start it.
   if (!/ ass /.test(spawnSync(file, ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return;

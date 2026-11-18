@@ -15,7 +15,11 @@ const { spawn, spawnSync } = require("node:child_process");
 const programs = require("./programs");
 const { track, trackFolder, untrackFolder, kill, sleep } = require("./running");
 
-const LIBASS = "--libass has ffmpeg draw the captions without Chrome.";
+// The end of each message that says no Chrome draws here: libass draws
+// without one, and draws a font of fonts.css only where this ffmpeg's
+// libass can use its files, which a run with --libass asks it before it
+// draws.
+const LIBASS = "--libass has ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts.css.";
 
 // Chrome as a run looks for it and asks it its version (see
 // programs.find()): the path CHROME_PATH gives, or a name on PATH, as

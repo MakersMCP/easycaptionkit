@@ -240,7 +240,7 @@ test("files that are not there, a folder that cannot be written, a link to nowhe
   const ADVICE = {
     FFMPEG_PATH: `Set FFMPEG_PATH to an ffmpeg that runs, or unset it and install one (${INSTALL}).`,
     FFPROBE_PATH: `Set FFPROBE_PATH to an ffprobe that runs, or unset it and install ffmpeg, which comes with ffprobe (${INSTALL}).`,
-    CHROME_PATH: "Set CHROME_PATH to a Chrome that runs, or unset it and install Google Chrome or Chromium. --libass has ffmpeg draw the captions without Chrome.",
+    CHROME_PATH: "Set CHROME_PATH to a Chrome that runs, or unset it and install Google Chrome or Chromium. --libass has ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts.css.",
   };
   const noFfmpeg = run([__filename, "--words", words, "--out", path.join(dir, "cli-c")], { env: { ...process.env, FFMPEG_PATH: "/nonexistent/ffmpeg" } });
   assert.equal(noFfmpeg.status, 1);
@@ -285,13 +285,14 @@ test("files that are not there, a folder that cannot be written, a link to nowhe
     const noChrome = run([__filename, "--words", words, "--out", path.join(dir, "cli-d")], { env: { ...process.env, CHROME_PATH: "/nonexistent/chrome" } });
     assert.equal(noChrome.status, 1);
     assert.equal(noChrome.stderr, `easycaptionkit: easycaptionkit needs Chrome, and CHROME_PATH points to /nonexistent/chrome, where there is none. ${ADVICE.CHROME_PATH}\n`);
-    // With no Chrome at all, the message says how to get one and that --libass needs none.
+    // With no Chrome at all, the message says how to get one and that --libass needs none where this ffmpeg's libass
+    // can use the font files of fonts.css.
     if (process.platform === "linux") {
       const empty = path.join(dir, "no-programs");
       fs.mkdirSync(empty, { recursive: true });
       const which = (name) => require("node:child_process").spawnSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" }).stdout.trim();
       const none = run([__filename, "--words", words, "--out", path.join(dir, "cli-d")], { env: { ...process.env, PATH: empty, FFMPEG_PATH: which("ffmpeg"), FFPROBE_PATH: which("ffprobe") } });
-      assert.equal(none.stderr, "easycaptionkit: easycaptionkit needs Chrome to draw the captions, and none was found. Install Google Chrome or Chromium, or set CHROME_PATH to one. --libass has ffmpeg draw the captions without Chrome.\n");
+      assert.equal(none.stderr, "easycaptionkit: easycaptionkit needs Chrome to draw the captions, and none was found. Install Google Chrome or Chromium, or set CHROME_PATH to one. --libass has ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts.css.\n");
     }
   }
   // CHROME_PATH alone names a Chrome, as in the other kits.

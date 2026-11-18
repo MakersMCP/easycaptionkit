@@ -947,19 +947,22 @@ function filesOfLook(look, files) {
 // libass's folder (`name`), so its words are given for the first file that
 // went in by its own name, and for none where every one went in by another
 // (see fontsOfLook). A WOFF2 file opens where ffmpeg's FreeType reads WOFF2,
-// and Chrome reads WOFF2; a damaged one opens in neither.
+// and Chrome reads WOFF2; a damaged one opens in neither. Chrome draws the
+// captions only where it starts, and a run with --libass does not start it,
+// so that way is given last, for where it starts.
 function unopenedText(look, unopened) {
   const own = unopened.find((u) => u.name === path.basename(u.file));
-  const ways = unopened.some((u) => woff2Like(u.file)) ? "give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does" : "or give fonts.css a file of the font that libass can use";
-  return `This ffmpeg's libass cannot use ${filesOfLook(look, unopened.map((u) => u.file))}${own ? `: it said ${quoted(own.line)}` : ""}. Leave out --libass to have Chrome draw the captions, ${ways}`;
+  const ways = unopened.some((u) => woff2Like(u.file)) ? "Give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does" : "Give fonts.css a file of the font that libass can use";
+  return `This ffmpeg's libass cannot use ${filesOfLook(look, unopened.map((u) => u.file))}${own ? `: it said ${quoted(own.line)}` : ""}. ${ways}. Where Chrome starts here, leave out --libass to have Chrome draw the captions`;
 }
 
 // What a run says of the font files of the look it does not give libass,
-// [{ file, why }] (see fontsOfLook): which, why, and what to do.
+// [{ file, why }] (see fontsOfLook): which, why, and what to do, Chrome's
+// way last, as above.
 function leftText(look, left) {
   const why = [...new Set(left.map((l) => l.why))];
   const reason = why.length > 1 ? `${why.slice(0, -1).join(", ")} or ${why[why.length - 1]}` : why[0];
-  return `libass cannot be given ${filesOfLook(look, left.map((l) => l.file))}: ${left.length === 1 ? "it" : "each"} ${reason}, and easycaptionkit gives libass no such file. Leave out --libass to have Chrome draw the captions, or give fonts.css another file of the font`;
+  return `libass cannot be given ${filesOfLook(look, left.map((l) => l.file))}: ${left.length === 1 ? "it" : "each"} ${reason}, and easycaptionkit gives libass no such file. Give fonts.css another file of the font. Where Chrome starts here, leave out --libass to have Chrome draw the captions`;
 }
 
 // What fontconfig gives for a letter the font of captions.ass lacks, for
@@ -1138,13 +1141,15 @@ async function captionVideo(videoFile, options) {
         drawn = await renderStates({ cues, words, states, style: options.style, look, place, duration: video.duration, dir: run.work, log, boxed: (all, fonts) => chromeBoxes(all, fonts, { kit: kitLetters(look) }) });
       } catch (err) {
         // A Chrome that cannot start here (no usable sandbox, as in a
-        // container) stops the run before the encode; libass needs none. A
-        // Chrome the system stopped as memory ran out can draw with fewer
-        // jobs at once, or a smaller video. A message that ends with a full
-        // stop, as one of what to do does, keeps only that one.
+        // container) stops the run before the encode; libass needs none,
+        // and draws a font of fonts.css only where this ffmpeg's libass can
+        // use its files. A Chrome the system stopped as memory ran out can
+        // draw with fewer jobs at once, or a smaller video. A message that
+        // ends with a full stop, as one of what to do does, keeps only that
+        // one.
         const said = err.message.replace(/\.$/, "");
-        if (err.chrome && err.signal === "SIGKILL") err.message = `${said}. Run again with fewer jobs at once or with a smaller video, or pass --libass to have ffmpeg draw the captions without Chrome`;
-        else if (err.chrome && err.start) err.message = `${said}. Pass --libass to have ffmpeg draw the captions without Chrome`;
+        if (err.chrome && err.signal === "SIGKILL") err.message = `${said}. Run again with fewer jobs at once or with a smaller video, or pass --libass to have ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts.css`;
+        else if (err.chrome && err.start) err.message = `${said}. Pass --libass to have ffmpeg draw the captions without Chrome where this ffmpeg's libass can use the font files of fonts.css`;
         throw err;
       }
       fs.writeFileSync(path.join(run.work, "captions.ass"), assFile(drawn.scales));
