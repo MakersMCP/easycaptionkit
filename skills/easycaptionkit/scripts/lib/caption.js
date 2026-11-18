@@ -897,7 +897,8 @@ const fontsFolder = (look, dir) => (look.from === "fonts.css" && look.faces.leng
 // that fonts.css can name too: a file past 64 MB, or one that does not
 // start as a font file does, which the kit's own measuring passes over
 // too, is no font libass can use, and is left out, as is one that cannot
-// be read. `left` gives each such file with why, [{ file, why }]. libass
+// be read (see notFont). `left` gives each such file with why, [{ file,
+// why }]. libass
 // passes over a file whose name starts with a dot, and names one it cannot
 // open by its name, which a line break cuts in two and in which ffmpeg
 // writes other control characters as ?, so such a file goes in as font,
@@ -923,13 +924,10 @@ function fontsOfLook(look, work) {
     try {
       fs.linkSync(file, path.join(dir, name));
     } catch {
-      try {
-        fs.copyFileSync(file, path.join(dir, name));
-      } catch {
-        // A file that cannot be read is no font libass can use.
-        left.push({ file, why: "cannot be read" });
-        continue;
-      }
+      // Where no link can be made, as across file systems, a copy, which
+      // stops the run with what the system said where it fails, as on a
+      // full disk.
+      fs.copyFileSync(file, path.join(dir, name));
     }
     names.set(name, file);
   }

@@ -791,6 +791,16 @@ test("a font file of fonts.css that libass opens and cannot use, as one with no 
   fs.truncateSync(path.join(huge, "files", "huge.ttf"), 65 * 1024 * 1024);
   assert.equal(stopped(huge, "huge"), "easycaptionkit: libass cannot be given files/huge.ttf, a font file fonts.css gives for Kitfont: it is past 64 MB, and easycaptionkit gives libass no such file. Leave out --libass to have Chrome draw the captions, or give fonts.css another file of the font");
   assert.equal(stopped(kitWith("kit-movie", "movie.ttf", Buffer.alloc(4096)), "movie"), "easycaptionkit: libass cannot be given files/movie.ttf, a font file fonts.css gives for Kitfont: it does not start as a font file does, and easycaptionkit gives libass no such file. Leave out --libass to have Chrome draw the captions, or give fonts.css another file of the font");
+  // A font file this user may not read.
+  if (process.getuid && process.getuid() !== 0) {
+    const locked = kitWith("kit-locked", "locked.ttf", ttf);
+    fs.chmodSync(path.join(locked, "files", "locked.ttf"), 0o000);
+    try {
+      assert.equal(stopped(locked, "locked"), "easycaptionkit: libass cannot be given files/locked.ttf, a font file fonts.css gives for Kitfont: it cannot be read, and easycaptionkit gives libass no such file. Leave out --libass to have Chrome draw the captions, or give fonts.css another file of the font");
+    } finally {
+      fs.chmodSync(path.join(locked, "files", "locked.ttf"), 0o644);
+    }
+  }
 });
 
 test("an ffmpeg that fails or is stopped when libass is asked whether it can use the font files of fonts.css stops the run with how it ended, where the run burned and named the kit's font", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform === "win32" && "needs a shell script for ffmpeg" }, function () {
