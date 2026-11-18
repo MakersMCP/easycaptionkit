@@ -515,4 +515,4 @@ function assLetters(cues, font) {
 // names, by that font: [{ family, letters }].
 const fallbackLetters = (cues, font) => assLetters(cues, font).fallbacks;
 
-module.exports = { srt, vtt, ass, assFont, kitLetters, estimatedScales, shrunkOf, assLetters, fallbackLetters, clock, assClock, assColor, assTag, dimmed, escapeSrt, SRT_SPECIAL, ARIAL };
+module.exports = { srt, vtt, ass, assFont, facesAt, kitLetters, estimatedScales, shrunkOf, assLetters, fallbackLetters, clock, assClock, assColor, assTag, dimmed, escapeSrt, SRT_SPECIAL, ARIAL };

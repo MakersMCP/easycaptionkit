@@ -12,7 +12,7 @@ const crypto = require("node:crypto");
 const { loadWords, handFixed, wordsSha256, FORMATS, MOST_OPENED, DEEPEST } = require("./words");
 const { cjkLanguage, arabicIn, scriptsIn } = require("./text");
 const { buildCues, states: makeStates, readingSpeed } = require("./cues");
-const { srt, vtt, ass, assFont, kitLetters, estimatedScales, shrunkOf, assLetters, SRT_SPECIAL } = require("./subtitles");
+const { srt, vtt, ass, assFont, facesAt, kitLetters, estimatedScales, shrunkOf, assLetters, SRT_SPECIAL } = require("./subtitles");
 const { machineLetters, chromeBoxes, boxesIn } = require("./boxes");
 const { captionLayout, charsThatFit, defaultPlaces, shapeOf } = require("./places");
 const { chooseLook, variableFace, machineFont, fallbackFont } = require("./look");
@@ -1064,10 +1064,16 @@ async function captionVideo(videoFile, options) {
     const progress = (share) => log(encodingLine(share));
     const unit = options.style === "word" ? ["word", "words"] : ["caption", "captions"];
     if (useLibass) {
-      // A font file of the look that libass cannot open stops the run before
+      // Where captions.ass sets a letter in the font of fonts.css, a file of
+      // the faces it draws with that libass cannot open stops the run before
       // anything is drawn, as libass would draw another font in its place.
+      // Where it sets every letter in another font, as Japanese over a Latin
+      // font, and for the faces of other weights and styles, which captions.ass
+      // draws nothing with, libass is not asked.
       const fonts = fontsOfLook(look, run.work);
-      const unopened = await ffmpeg.libassUnopened(bins, run.work, fonts.dir, [...fonts.names.keys()]);
+      const drawing = new Set(letters.own > 0 ? facesAt(look).map((f) => f.file) : []);
+      const asked = [...fonts.names].filter(([, file]) => drawing.has(file)).map(([name]) => name);
+      const unopened = await ffmpeg.libassUnopened(bins, run.work, fonts.dir, asked);
       if (unopened.length) throw new Error(unopenedText(look, unopened.map((u) => ({ file: fonts.names.get(u.name), line: u.line }))));
       log(`Drawing ${count(states.length, "caption state", "caption states")} with libass`);
       // libass measures nothing it is given: a line that by the estimate is

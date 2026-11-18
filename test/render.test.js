@@ -700,40 +700,52 @@ test("libass is given a fonts folder of the look's own font files alone, not the
   const huge = path.join(named, "files", "huge.woff2");
   fs.writeFileSync(huge, "wOF2");
   fs.truncateSync(huge, 65 * 1024 * 1024);
-  fs.appendFileSync(path.join(named, "fonts.css"), `@font-face {\n  font-family: "Inter";\n  src: url("files/recording.mov") format("woff2");\n  font-weight: 400;\n  font-style: italic;\n}\n\n@font-face {\n  font-family: "Inter";\n  src: url("files/huge.woff2") format("woff2");\n  font-weight: 700;\n  font-style: normal;\n}\n`);
+  fs.appendFileSync(path.join(named, "fonts.css"), `@font-face {\n  font-family: "Inter";\n  src: url("files/recording.mov") format("woff2");\n  font-weight: 400;\n  font-style: italic;\n}\n\n@font-face {\n  font-family: "Inter";\n  src: url("files/huge.woff2") format("woff2");\n  font-weight: 700;\n  font-style: italic;\n}\n`);
   fs.rmSync(listed, { force: true });
   const c = caption([blackVideo("black-crowded.mp4", { width: 360, height: 640, seconds: 2 }), "--words", words, "--fonts", named, "--libass", "--out", out("named")], env);
   assert.deepEqual(c.look.files, [`files/${file}`, "files/recording.mov", "files/huge.woff2"]);
   assert.equal(fs.readFileSync(listed, "utf8"), `${file}\n`.repeat(2));
 });
 
-test("a font file of fonts.css that libass cannot open stops a --libass run before it draws, with each such file as fonts.css names it, a name that starts with a dot or holds a line break too, what libass said and what to do", { skip: !h.hasFfmpeg && "needs ffmpeg" }, function () {
+test("a font file of fonts.css that libass cannot open, of a face captions.ass draws its letters with, stops a --libass run before it draws, with each such file as fonts.css names it, a name that starts with a dot or holds a line break too, what libass said and what to do, and one of a face it draws nothing with stops nothing", { skip: !h.hasFfmpeg && "needs ffmpeg" }, function () {
   if (!/ ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
   const video = blackVideo("black-unopened.mp4", { width: 360, height: 640, seconds: 2 });
   const words = h.write("unopened.json", { words: h.evenWords("not in that font", { start: 0.2 }) });
   const env = { env: h.onPath({ CHROME_PATH: "/nonexistent/chrome" }) };
-  // Next to Inter's file, a bold that starts as WOFF2 and is no font, by a name libass passes over in a folder, and an
-  // italic that starts as TrueType and is no font, by a name with a line break, which would cut libass's line in two.
+  const noFont = (head) => Buffer.concat([Buffer.from(head), Buffer.alloc(60)]);
+  const face = (file, weight, style, range = "") => `@font-face {\n  font-family: "Inter";\n  src: url("files/${file}") format("woff2");\n  font-weight: ${weight};\n  font-style: ${style};\n${range ? `  unicode-range: ${range};\n` : ""}}\n`;
+  // Next to Inter's 400, the bold the captions are drawn in, as two files that split the letters between them and are
+  // no fonts: one that starts as WOFF2, by a name libass passes over in a folder, and one that starts as TrueType, by a
+  // name with a line break, which would cut libass's line in two; and an italic that is no font either.
   const kit = h.fontKit("kit-unopened");
-  fs.writeFileSync(path.join(kit, "files", ".bold.woff2"), Buffer.concat([Buffer.from("wOF2"), Buffer.alloc(60)]));
-  fs.writeFileSync(path.join(kit, "files", "cut\nshort.ttf"), Buffer.concat([Buffer.from([0, 1, 0, 0]), Buffer.alloc(60)]));
-  fs.appendFileSync(path.join(kit, "fonts.css"), '@font-face {\n  font-family: "Inter";\n  src: url("files/.bold.woff2") format("woff2");\n  font-weight: 700;\n  font-style: normal;\n}\n\n@font-face {\n  font-family: "Inter";\n  src: url("files/cut%0Ashort.ttf") format("truetype");\n  font-weight: 400;\n  font-style: italic;\n}\n');
+  fs.writeFileSync(path.join(kit, "files", ".bold.woff2"), noFont("wOF2"));
+  fs.writeFileSync(path.join(kit, "files", "cut\nshort.ttf"), noFont([0, 1, 0, 0]));
+  fs.writeFileSync(path.join(kit, "files", "cut-italic.ttf"), noFont([0, 1, 0, 0]));
+  fs.appendFileSync(path.join(kit, "fonts.css"), face(".bold.woff2", 700, "normal", "U+0000-00FF") + face("cut%0Ashort.ttf", 700, "normal", "U+0100-024F") + face("cut-italic.ttf", 400, "italic"));
   const r = h.run([video, "--words", words, "--fonts", kit, "--libass", "--out", out("unopened"), "--json"], env);
   assert.equal(r.status, 1, r.stdout);
-  // A libass that opens no WOFF2 file cannot open Inter's either, and says so first.
-  const which = h.libassTakesWoff2() ? "files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter: it said \"Error opening memory font 'font.woff2'\"" : "files/inter-latin-400.woff2, files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter: it said \"Error opening memory font 'inter-latin-400.woff2'\"";
-  const message = `This ffmpeg's libass cannot open ${which}. Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2`;
+  // The bold's two files, on every ffmpeg: not Inter's 400, which a libass that opens no WOFF2 file cannot open either,
+  // nor the italic.
+  const message = "This ffmpeg's libass cannot open files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter: it said \"Error opening memory font 'font.woff2'\". Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2";
   assert.deepEqual(JSON.parse(r.stdout), { ok: false, error: message });
   assert.equal(r.stderr, `easycaptionkit: ${message}\n`);
   assert.equal(fs.existsSync(out("unopened")), false);
   // A file libass cannot open that is no WOFF2 file is no question of which files ffmpeg's FreeType reads.
   const cut = h.fontKit("kit-cut");
-  fs.writeFileSync(path.join(cut, "files", "cut.ttf"), Buffer.concat([Buffer.from([0, 1, 0, 0]), Buffer.alloc(60)]));
-  fs.writeFileSync(path.join(cut, "fonts.css"), '@font-face {\n  font-family: "Inter";\n  src: url("files/cut.ttf") format("truetype");\n  font-weight: 700;\n  font-style: normal;\n}\n');
+  fs.writeFileSync(path.join(cut, "files", "cut.ttf"), noFont([0, 1, 0, 0]));
+  fs.writeFileSync(path.join(cut, "fonts.css"), face("cut.ttf", 700, "normal"));
   const c = h.run([video, "--words", words, "--fonts", cut, "--libass", "--out", out("cut-font")], env);
   assert.equal(c.status, 1, c.stdout);
   assert.equal(c.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot open files/cut.ttf, a font file fonts.css gives for Inter: it said \"Error opening memory font 'cut.ttf'\". Leave out --libass to have Chrome draw the captions, or give fonts.css a file of the font that libass opens");
   assert.equal(fs.existsSync(out("cut-font")), false);
+  // The italic alone beside Inter's 400, which draws the captions, stops nothing: the run burns that 400, the WOFF2 file
+  // a site serves, or the same font as a TrueType file where this ffmpeg's libass opens no WOFF2 file.
+  const italic = h.fontKit("kit-italic-cut", { ttf: !h.libassTakesWoff2() });
+  fs.writeFileSync(path.join(italic, "files", "cut-italic.ttf"), noFont([0, 1, 0, 0]));
+  fs.appendFileSync(path.join(italic, "fonts.css"), face("cut-italic.ttf", 400, "italic"));
+  const i = h.run([video, "--words", words, "--fonts", italic, "--libass", "--style", "line", "--out", out("italic-cut")], env);
+  assert.equal(i.status, 0, i.stderr);
+  assert.match(i.stdout, /\n {2}Font {6}Inter 400 from fonts\.css\n/);
 });
 
 test("libass says a variable file's letters are thin only where that file draws letters, and the summary names the fonts captions.ass sets the others in", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform !== "linux" && "needs fontconfig" }, function () {
@@ -749,8 +761,11 @@ test("libass says a variable file's letters are thin only where that file draws 
   const latin = h.run([video, "--words", h.write("variable-latin.json", { words: h.evenWords("thin letters here", { start: 0.2 }) }), "--fonts", kit, "--libass", "--style", "line", "--out", out("variable-latin")], env);
   assert.equal(latin.status, 0, latin.stderr);
   assert.match(latin.stdout, new RegExp(`\\n {2}Note {6}libass draws Inter from files/inter-latin-400\\.${ttf ? "ttf" : "woff2"}, a file of the weights 100 to 900, at that file's default weight, not at 700`));
-  // Japanese has no letter in Inter's file.
-  const kana = h.run([video, "--words", h.write("variable-kana.json", [{ text: "こんにちは", start: 0.2, end: 1.5 }]), "--fonts", kit, "--libass", "--style", "line", "--out", out("variable-kana")], env);
+  // Japanese has no letter in Inter's file, so libass is not asked about it: the WOFF2 file a site serves is burned on
+  // every ffmpeg, where a libass that opens no WOFF2 file stopped the run, which drew no letter with it.
+  const woff2 = ttf ? h.fontKit("kit-variable-woff2") : kit;
+  fs.writeFileSync(path.join(woff2, "fonts.css"), fs.readFileSync(path.join(woff2, "fonts.css"), "utf8").replace("font-weight: 400;", "font-weight: 100 900;"));
+  const kana = h.run([video, "--words", h.write("variable-kana.json", [{ text: "こんにちは", start: 0.2, end: 1.5 }]), "--fonts", woff2, "--libass", "--style", "line", "--out", out("variable-kana")], env);
   assert.equal(kana.status, 0, kana.stderr);
   assert.doesNotMatch(kana.stdout + fs.readFileSync(path.join(out("variable-kana"), "CAPTIONS.md"), "utf8"), thin);
   const facts = JSON.parse(fs.readFileSync(path.join(out("variable-kana"), "captions.json"), "utf8"));
