@@ -116,14 +116,16 @@ const CRASHES = new Set(["SIGSEGV", "SIGBUS", "SIGILL", "SIGABRT", "SIGFPE"]);
 // Why ffmpeg or ffprobe failed, as words that follow "could not ...: ".
 // By a signal: which one, and for SIGKILL, which the system sends a
 // program when memory runs out, as on a machine running many jobs, what
-// to do. Else the last line it printed that names what went wrong, without
-// the closing lines and the "[name @ 0x...]" that starts a line, as
-// "Error applying option 'color_primaries' to filter 'setparams'" in the
-// place of ffmpeg's last line, "Error : Invalid argument". ffmpeg itself
-// takes SIGTERM and SIGINT, ends with code 255, and says so only at a
-// level -loglevel error leaves out: code 255 with nothing said is that.
-function whyFailed({ code, signal, stderr }, who = "it") {
-  if (signal === "SIGKILL") return `${who} was stopped by SIGKILL, as the system stops a program when memory runs out. Run again with fewer jobs at once, or with a smaller video`;
+// to do: fewer jobs at once, and a smaller video, but for a call that
+// reads none (`video` false). Else the last line it printed that names
+// what went wrong, without the closing lines and the "[name @ 0x...]" that
+// starts a line, as "Error applying option 'color_primaries' to filter
+// 'setparams'" in the place of ffmpeg's last line, "Error : Invalid
+// argument". ffmpeg itself takes SIGTERM and SIGINT, ends with code 255,
+// and says so only at a level -loglevel error leaves out: code 255 with
+// nothing said is that.
+function whyFailed({ code, signal, stderr }, who = "it", { video = true } = {}) {
+  if (signal === "SIGKILL") return `${who} was stopped by SIGKILL, as the system stops a program when memory runs out. Run again with fewer jobs at once${video ? ", or with a smaller video" : ""}`;
   if (signal) return CRASHES.has(signal) ? `${who} crashed (${signal})` : `${who} was stopped by ${signal}`;
   const lines = String(stderr || "")
     .split(/\r?\n|\r/)
@@ -889,7 +891,9 @@ async function libassFollows(bins, dir, caps) {
 // its input first, so it stops the run with how it ended, as the burn
 // would: one built without its lavfi device says "Unknown input format:
 // 'lavfi'". So does one that cannot be started, or prints nothing for two
-// minutes.
+// minutes. One the system stops as memory runs out is told to run fewer
+// jobs at once alone, as this call reads a small color source and the
+// font files, and no video.
 async function libassUnopened(bins, dir, fontsDir, names) {
   if (!names.length) return [];
   const file = path.join(dir, "fonts.ass");
@@ -899,7 +903,7 @@ async function libassUnopened(bins, dir, fontsDir, names) {
   try {
     const result = await run(bins.ffmpeg, ["-hide_banner", "-nostdin", "-loglevel", "warning", "-f", "lavfi", "-i", "color=c=black:s=16x16:r=1:d=1", "-vf", libassFilter("fonts.ass", fontsDir), "-frames:v", "1", "-f", "null", "-"], { cwd: dir });
     const unopened = unopenedOf(result.stderr, names);
-    if (!unopened.length && (result.code !== 0 || result.signal)) throw new Error(`ffmpeg failed when asked whether libass can use the font files of fonts.css: ${whyFailed(result)}`);
+    if (!unopened.length && (result.code !== 0 || result.signal)) throw new Error(`ffmpeg failed when asked whether libass can use the font files of fonts.css: ${whyFailed(result, "it", { video: false })}`);
     return unopened;
   } finally {
     fs.rmSync(file, { force: true });

@@ -808,14 +808,15 @@ test("a font file of fonts.css that libass opens and cannot use, as one with no 
   }
 });
 
-test("an ffmpeg that fails or is stopped when libass is asked whether it can use the font files of fonts.css stops the run with how it ended, where the run burned and named the kit's font", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform === "win32" && "needs a shell script for ffmpeg" }, function () {
+test("an ffmpeg that fails or is stopped when libass is asked whether it can use the font files of fonts.css stops the run with how it ended, where the run burned and named the kit's font, and one stopped by SIGKILL is told to run fewer jobs at once alone, as that call reads no video", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform === "win32" && "needs a shell script for ffmpeg" }, function () {
   if (!/ ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
   const video = blackVideo("black-asked.mp4", { width: 360, height: 640, seconds: 2 });
   const words = h.write("asked.json", { words: h.evenWords("asked and stopped", { start: 0.2 }) });
   const kit = h.fontKit("kit-asked");
   // ffmpeg as it is, but when libass is asked at -loglevel warning: one stopped by SIGKILL, as the system stops a program
   // when memory runs out, and one built without its lavfi device, which fails before its filter starts. Neither names a
-  // font file libass could not open.
+  // font file libass could not open. The call reads a small color source and the font files, so a smaller video would
+  // change nothing for it.
   const real = spawnSync("sh", ["-c", "command -v ffmpeg"], { encoding: "utf8" }).stdout.trim();
   const stand = (name, then) => {
     const file = path.join(h.dir, "asked-bin", name, "ffmpeg");
@@ -824,7 +825,7 @@ test("an ffmpeg that fails or is stopped when libass is asked whether it can use
     return file;
   };
   for (const [ffmpeg, why] of [
-    [stand("killed", "kill -KILL $$"), "it was stopped by SIGKILL, as the system stops a program when memory runs out. Run again with fewer jobs at once, or with a smaller video"],
+    [stand("killed", "kill -KILL $$"), "it was stopped by SIGKILL, as the system stops a program when memory runs out. Run again with fewer jobs at once"],
     [stand("failed", "echo \"Unknown input format: 'lavfi'\" >&2; exit 1"), "Unknown input format: 'lavfi'"],
   ]) {
     const folder = out(`asked-${path.basename(path.dirname(ffmpeg))}`);
@@ -1802,8 +1803,10 @@ test("why ffmpeg failed: the line that names the filter or option, not the closi
   assert.equal(whyFailed({ code: 234, signal: null, stderr: refused }), "Invalid color space");
   assert.equal(whyFailed({ code: 1, signal: null, stderr: "Invalid argument\n" }), "Invalid argument");
   assert.equal(whyFailed({ code: 1, signal: null, stderr: "" }), "it ended with code 1 and said nothing");
-  // Killed, as the system kills a program when memory runs out, it says nothing.
+  // Killed, as the system kills a program when memory runs out, it says nothing. A call that reads no video, as the one
+  // that asks libass about the font files, gets no advice of a smaller video.
   assert.equal(whyFailed({ code: null, signal: "SIGKILL", stderr: "" }), "it was stopped by SIGKILL, as the system stops a program when memory runs out. Run again with fewer jobs at once, or with a smaller video");
+  assert.equal(whyFailed({ code: null, signal: "SIGKILL", stderr: "" }, "it", { video: false }), "it was stopped by SIGKILL, as the system stops a program when memory runs out. Run again with fewer jobs at once");
   assert.equal(whyFailed({ code: null, signal: "SIGSEGV", stderr: "" }, "ffprobe"), "ffprobe crashed (SIGSEGV)");
   // ffmpeg takes SIGTERM and SIGINT itself, and ends with 255, saying so only at a level -loglevel error leaves out.
   assert.equal(whyFailed({ code: 255, signal: null, stderr: "" }), "it ended with code 255, as ffmpeg does when a signal such as SIGTERM or SIGINT stops it");
