@@ -19,7 +19,7 @@ const PROGRAM = `node ${arg(CLI)}`;
 const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // A command as it was printed, run as a shell runs it, from `cwd`, with
 // this node first on PATH.
-const shell = (command, cwd) => require("node:child_process").spawnSync(command, { shell: true, cwd, encoding: "utf8", timeout: 600_000, env: { ...process.env, PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH}` } });
+const shell = (command, cwd, env = process.env) => require("node:child_process").spawnSync(command, { shell: true, cwd, encoding: "utf8", timeout: 600_000, env: { ...env, PATH: `${path.dirname(process.execPath)}${path.delimiter}${env.PATH}` } });
 
 test("the skill folder carries its own version, the same as the package's and every plugin manifest's", () => {
   const version = require("../skills/easycaptionkit/scripts/lib/version");
@@ -1009,8 +1009,9 @@ test("the fix-a-word command CAPTIONS.md gives for subtitles names the video and
 test("the flags CAPTIONS.md gives a captioning run to fix a word, and the free font's --font, are code, so copied to the end of their line and run they fix the captions in the same folder and name the font as it is", { skip: (!hasFfmpeg && "needs ffmpeg") || (process.platform === "win32" && "needs a POSIX shell") }, function () {
   const { spawnSync } = require("node:child_process");
   const { findChrome } = require("../skills/easycaptionkit/scripts/lib/chrome");
-  const { fontKit, libassTakesWoff2 } = require("./helpers");
-  // A libass that opens no WOFF2 file stops a run with the kit's font before it draws.
+  const { fontKit, libassTakesWoff2, onPath } = require("./helpers");
+  // A libass that opens no WOFF2 file stops a run with the kit's font before it draws. The runs take the ffmpeg on PATH,
+  // which that is asked of.
   const libass = / ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout) && libassTakesWoff2();
   if (!libass && !findChrome()) return this.skip("needs libass that opens WOFF2 files, or Chrome");
   const work = path.join(dir, "fix-caption");
@@ -1019,7 +1020,7 @@ test("the flags CAPTIONS.md gives a captioning run to fix a word, and the free f
   fs.writeFileSync(path.join(work, "t.json"), JSON.stringify({ words: evenWords("welcome to the launch") }));
   const kit = fontKit("fix-caption-fonts", { family: "Brandface", status: "commercial" });
   const first = ["clip.mp4", "--words", "t.json", "--fonts", kit, ...(libass ? ["--libass"] : []), "--out", "my out"];
-  const made = run(first, { cwd: work });
+  const made = run(first, { cwd: work, env: onPath() });
   assert.equal(made.status, 0, made.stderr);
   const md = fs.readFileSync(path.join(work, "my out", "CAPTIONS.md"), "utf8");
   // Everything after "again with" to the end of the line, as a person copies it, is the code span and its full stop.
@@ -1032,7 +1033,7 @@ test("the flags CAPTIONS.md gives a captioning run to fix a word, and the free f
   fs.writeFileSync(path.join(work, "my out", "words.json"), JSON.stringify(list));
   // The command as it was typed, each word quoted as the shell needs it, and the flags after it.
   const { quote } = require("../skills/easycaptionkit/scripts/lib/report");
-  const again = shell(`${PROGRAM} ${first.map((a) => quote(a)).join(" ")} ${flags}`, work);
+  const again = shell(`${PROGRAM} ${first.map((a) => quote(a)).join(" ")} ${flags}`, work, onPath());
   assert.equal(again.status, 0, again.stderr);
   assert.match(fs.readFileSync(path.join(work, "my out", "captions.srt"), "utf8"), /WELCOME\sto/);
   assert.deepEqual(fs.readdirSync(work).filter((name) => name.startsWith("my out")), ["my out"]);

@@ -135,13 +135,18 @@ function write(name, content) {
 
 // A font kit like easyfontkit's: fonts.css, fonts.json and files/, with
 // Inter's latin cut under the family name asked, and the license asked.
-function fontKit(name, { family = "Inter", status = "open" } = {}) {
+// The cut is the WOFF2 file a site serves, or with `ttf` the same font as
+// a TrueType file, inter-latin-400.ttf, which is the WOFF2 unpacked as the
+// WOFF2 spec decodes it: libass draws the two alike, and an ffmpeg whose
+// FreeType reads no WOFF2 opens the TrueType one.
+function fontKit(name, { family = "Inter", status = "open", ttf = false } = {}) {
   const folder = path.join(dir, name);
+  const file = ttf ? "inter-latin-400.ttf" : "inter-latin-400.woff2";
   fs.mkdirSync(path.join(folder, "files"), { recursive: true });
-  fs.copyFileSync(path.join(FIXTURES, "inter-latin-400.woff2"), path.join(folder, "files", "inter-latin-400.woff2"));
+  fs.copyFileSync(path.join(FIXTURES, file), path.join(folder, "files", file));
   fs.writeFileSync(
     path.join(folder, "fonts.css"),
-    `/* Fonts of example.com, read by easyfontkit 0.1.1. */\n\n@font-face {\n  font-family: "${family}";\n  src: url("files/inter-latin-400.woff2") format("woff2");\n  font-weight: 400;\n  font-style: normal;\n  font-display: swap;\n}\n\n:root {\n  --font-heading: "${family}", sans-serif;\n  --font-heading-free: "Inter", sans-serif;\n  --font-body: "${family}", sans-serif;\n}\n`,
+    `/* Fonts of example.com, read by easyfontkit 0.1.1. */\n\n@font-face {\n  font-family: "${family}";\n  src: url("files/${file}") format("${ttf ? "truetype" : "woff2"}");\n  font-weight: 400;\n  font-style: normal;\n  font-display: swap;\n}\n\n:root {\n  --font-heading: "${family}", sans-serif;\n  --font-heading-free: "Inter", sans-serif;\n  --font-body: "${family}", sans-serif;\n}\n`,
   );
   const license =
     status === "open"
@@ -154,12 +159,13 @@ function fontKit(name, { family = "Inter", status = "open" } = {}) {
   return folder;
 }
 
-// Whether this ffmpeg's libass draws the Inter fixture from a fonts folder,
-// by what libass says at -loglevel debug of the font it picks: one it read
-// from the folder goes by its name alone, one of the machine's by its path.
-// The static builds BtbN makes, the hosted worker's 9.0.2 among them, have
-// a FreeType that reads no WOFF2 file, so their libass picks a font of the
-// machine's.
+// Whether the ffmpeg on PATH has a libass that draws the Inter fixture from
+// a fonts folder, by what libass says at -loglevel debug of the font it
+// picks: one it read from the folder goes by its name alone, one of the
+// machine's by its path. The static builds BtbN makes, the hosted worker's
+// 9.0.2 among them, have a FreeType that reads no WOFF2 file, so their
+// libass picks a font of the machine's. A run whose result this predicts
+// runs with onPath's environment, so it takes that ffmpeg too.
 let takesWoff2 = null;
 function libassTakesWoff2() {
   if (takesWoff2 !== null) return takesWoff2;
@@ -173,6 +179,16 @@ function libassTakesWoff2() {
   const r = spawnSync("ffmpeg", ["-hide_banner", "-nostdin", "-loglevel", "debug", "-f", "lavfi", "-i", "color=c=black:s=64x64:r=1:d=1", "-vf", "ass=filename=inter.ass:fontsdir=fonts", "-frames:v", "1", "-f", "null", "-"], { cwd: folder, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   takesWoff2 = /fontselect: \(Inter, 400, 0\) -> Inter-Regular,/.test(r.stderr || "");
   return takesWoff2;
+}
+
+// The environment of a run that takes the ffmpeg and ffprobe on PATH, the
+// ones the tests ask themselves: without FFMPEG_PATH and FFPROBE_PATH,
+// which can name others where the tests run, and with `extra` on top.
+function onPath(extra = {}) {
+  const env = { ...process.env };
+  delete env.FFMPEG_PATH;
+  delete env.FFPROBE_PATH;
+  return { ...env, ...extra };
 }
 
 // A brand kit like easybrandkit's.
@@ -193,4 +209,4 @@ function run(args, options = {}) {
   return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", timeout: 600_000, ...options });
 }
 
-module.exports = { dir, CLI, FIXTURES, hasFfmpeg, VSYNC, fpsMode, ffmpeg, video, vfrVideo, jitterVideo, frameTimes, probe, audioMd5, region, colorFrames, write, fontKit, libassTakesWoff2, brandKit, evenWords, run };
+module.exports = { dir, CLI, FIXTURES, hasFfmpeg, VSYNC, fpsMode, ffmpeg, video, vfrVideo, jitterVideo, frameTimes, probe, audioMd5, region, colorFrames, write, fontKit, libassTakesWoff2, onPath, brandKit, evenWords, run };
