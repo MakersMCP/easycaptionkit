@@ -880,21 +880,26 @@ async function libassFollows(bins, dir, caps) {
 // that libass says it could not open, and the words it said it in. libass
 // then draws a font of the machine's in its place, and says so only at a
 // level -loglevel error leaves out: the static builds of ffmpeg BtbN makes
-// have a FreeType that reads no WOFF2 file, the files easyfontkit saves.
-// So libass is asked once, in the folder `dir`, with the fonts folder the
-// burn gives it and nothing to draw: it reads every file there as it
-// starts, before anything else it does can fail, and what it said is read
-// however the run ended. One that cannot be started, or prints nothing for
-// two minutes, says nothing of the fonts, and stops the run as the burn
-// would.
+// have a FreeType that reads no WOFF2 file, and the files easyfontkit saves
+// are WOFF2 files where the site's are. So libass is asked once, in the
+// folder `dir`, with the fonts folder the burn gives it and nothing to
+// draw, and says what it could not open as its filter starts. An ffmpeg
+// that ends otherwise than with code 0 and names no file may have ended
+// before that, as it opens its input first, so it stops the run with how
+// it ended, as the burn would: one built without its lavfi device says
+// "Unknown input format: 'lavfi'". So does one that cannot be started, or
+// prints nothing for two minutes.
 async function libassUnopened(bins, dir, fontsDir, names) {
   if (!names.length) return [];
   const file = path.join(dir, "fonts.ass");
-  // libass 0.15, Ubuntu 22.04's, makes no track of a file without styles.
+  // libass 0.15, Ubuntu 22.04's, makes no track of a file without styles,
+  // and ffmpeg 4.4 then ends with code 1.
   fs.writeFileSync(file, "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n");
   try {
     const result = await run(bins.ffmpeg, ["-hide_banner", "-nostdin", "-loglevel", "warning", "-f", "lavfi", "-i", "color=c=black:s=16x16:r=1:d=1", "-vf", libassFilter("fonts.ass", fontsDir), "-frames:v", "1", "-f", "null", "-"], { cwd: dir });
-    return unopenedOf(result.stderr, names);
+    const unopened = unopenedOf(result.stderr, names);
+    if (!unopened.length && (result.code !== 0 || result.signal)) throw new Error(`ffmpeg failed when asked whether libass can use the font files of fonts.css: ${whyFailed(result)}`);
+    return unopened;
   } finally {
     fs.rmSync(file, { force: true });
   }

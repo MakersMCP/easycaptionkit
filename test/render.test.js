@@ -748,6 +748,34 @@ test("a font file of fonts.css that libass cannot open, of a face captions.ass d
   assert.match(i.stdout, /\n {2}Font {6}Inter 400 from fonts\.css\n/);
 });
 
+test("an ffmpeg that fails or is stopped when libass is asked whether it can use the font files of fonts.css stops the run with how it ended, where the run burned and named the kit's font", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform === "win32" && "needs a shell script for ffmpeg" }, function () {
+  if (!/ ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
+  const video = blackVideo("black-asked.mp4", { width: 360, height: 640, seconds: 2 });
+  const words = h.write("asked.json", { words: h.evenWords("asked and stopped", { start: 0.2 }) });
+  const kit = h.fontKit("kit-asked");
+  // ffmpeg as it is, but when libass is asked at -loglevel warning: one stopped by SIGKILL, as the system stops a program
+  // when memory runs out, and one built without its lavfi device, which fails before its filter starts. Neither names a
+  // font file libass could not open.
+  const real = spawnSync("sh", ["-c", "command -v ffmpeg"], { encoding: "utf8" }).stdout.trim();
+  const stand = (name, then) => {
+    const file = path.join(h.dir, "asked-bin", name, "ffmpeg");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `#!/bin/sh\nfor a in "$@"; do\n  if [ "$a" = warning ]; then ${then}; fi\ndone\nexec "${real}" "$@"\n`, { mode: 0o755 });
+    return file;
+  };
+  for (const [ffmpeg, why] of [
+    [stand("killed", "kill -KILL $$"), "it was stopped by SIGKILL, as the system stops a program when memory runs out. Run again with fewer jobs at once, or with a smaller video"],
+    [stand("failed", "echo \"Unknown input format: 'lavfi'\" >&2; exit 1"), "Unknown input format: 'lavfi'"],
+  ]) {
+    const folder = out(`asked-${path.basename(path.dirname(ffmpeg))}`);
+    const r = h.run([video, "--words", words, "--fonts", kit, "--libass", "--style", "line", "--out", folder], { env: h.onPath({ FFMPEG_PATH: ffmpeg, CHROME_PATH: "/nonexistent/chrome" }) });
+    assert.equal(r.status, 1, r.stdout);
+    assert.equal(r.stderr.split("\n").filter(Boolean).pop(), `easycaptionkit: ffmpeg failed when asked whether libass can use the font files of fonts.css: ${why}`);
+    assert.doesNotMatch(r.stderr, /Drawing/);
+    assert.equal(fs.existsSync(folder), false);
+  }
+});
+
 test("libass says a variable file's letters are thin only where that file draws letters, and the summary names the fonts captions.ass sets the others in", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform !== "linux" && "needs fontconfig" }, function () {
   if (!/ ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
   // Inter's file, given in fonts.css as one of the weights 100 to 900: the WOFF2 file a site serves, or the same font as a
