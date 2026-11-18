@@ -13,6 +13,11 @@ const { spawnSync } = require("node:child_process");
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "easycaptionkit-test-"));
 process.on("exit", () => fs.rmSync(dir, { recursive: true, force: true }));
 
+// Why a folder of the tests' own cannot go on PATH, where the temporary
+// folder's path holds the character that ends a folder there, as a colon;
+// else false.
+const notOnPath = dir.includes(path.delimiter) && `the temporary folder's path holds ${path.delimiter}, which ends a folder on PATH`;
+
 const CLI = path.resolve(__dirname, "../skills/easycaptionkit/scripts/easycaptionkit.js");
 const FIXTURES = path.join(__dirname, "fixtures");
 
@@ -209,4 +214,4 @@ function run(args, options = {}) {
   return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", timeout: 600_000, ...options });
 }
 
-module.exports = { dir, CLI, FIXTURES, hasFfmpeg, VSYNC, fpsMode, ffmpeg, video, vfrVideo, jitterVideo, frameTimes, probe, audioMd5, region, colorFrames, write, fontKit, libassTakesWoff2, onPath, brandKit, evenWords, run };
+module.exports = { dir, notOnPath, CLI, FIXTURES, hasFfmpeg, VSYNC, fpsMode, ffmpeg, video, vfrVideo, jitterVideo, frameTimes, probe, audioMd5, region, colorFrames, write, fontKit, libassTakesWoff2, onPath, brandKit, evenWords, run };

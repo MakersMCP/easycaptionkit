@@ -675,13 +675,18 @@ test("libass is given a fonts folder of the look's own font files alone, not the
   const kit = h.fontKit("kit-crowded", { ttf });
   fs.writeFileSync(path.join(kit, "files", "recording.mov"), Buffer.alloc(1 << 20));
   // An ffmpeg that lists the folder each ass filter is given as its fonts folder, as the burn runs, and notes each run
-  // at -loglevel warning, the one that asks libass which font files it opens.
+  // at -loglevel warning, the one that asks libass which font files it opens. The folder is read from the filter as
+  // ffmpeg reads it, one level of backslashes off for the graph and one for the filter's options, so a temporary
+  // folder whose name holds a space, a quote or a colon is read whole; every path goes into the script in single quotes.
   const real = spawnSync("sh", ["-c", "command -v ffmpeg"], { encoding: "utf8" }).stdout.trim();
   const fake = path.join(h.dir, "fontsdir-bin", "ffmpeg");
+  const lister = path.join(h.dir, "fontsdir-bin", "list.js");
   const listed = path.join(h.dir, "fontsdir-bin", "listed");
   const asked = path.join(h.dir, "fontsdir-bin", "asked");
+  const sq = (text) => `'${String(text).replace(/'/g, "'\\''")}'`;
   fs.mkdirSync(path.dirname(fake), { recursive: true });
-  fs.writeFileSync(fake, `#!/bin/sh\nfor a in "$@"; do\n  case "$a" in\n    *fontsdir=*) ls -A "$(printf '%s' "$a" | sed -n 's/.*fontsdir=\\([^:]*\\):.*/\\1/p')" >> "${listed}" ;;\n    warning) echo asked >> "${asked}" ;;\n  esac\ndone\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  fs.writeFileSync(lister, `"use strict";\nconst fs = require("node:fs");\nconst token = (s, stops) => {\n  let out = "";\n  let i = 0;\n  for (; i < s.length && !stops.includes(s[i]); i++) out += s[i] === "\\\\" && i + 1 < s.length ? s[++i] : s[i];\n  return [out, s.slice(i)];\n};\nfor (const a of process.argv.slice(2)) {\n  const at = a.indexOf("ass=filename=");\n  if (at < 0) continue;\n  let [rest] = token(a.slice(at + 4), "[],;");\n  while (rest) {\n    const [pair, after] = token(rest, ":");\n    if (pair.startsWith("fontsdir=")) for (const name of fs.readdirSync(pair.slice(9)).sort()) console.log(name);\n    rest = after.slice(1);\n  }\n}\n`);
+  fs.writeFileSync(fake, `#!/bin/sh\n${sq(process.execPath)} ${sq(lister)} "$@" >> ${sq(listed)}\nfor a in "$@"; do\n  if [ "$a" = warning ]; then echo asked >> ${sq(asked)}; fi\ndone\nexec ${sq(real)} "$@"\n`, { mode: 0o755 });
   const words = h.write("crowded.json", { words: h.evenWords("only the fonts", { start: 0.2 }) });
   const env = { env: h.onPath({ FFMPEG_PATH: fake, CHROME_PATH: "/nonexistent/chrome" }) };
   // libass is asked once whether it opens them, then given the same folder for the burn.
@@ -1344,7 +1349,13 @@ test("closing Chrome, or stopping the run, ends every process that holds its pro
     // Chrome keeps its crash reports where its config would be, not in the profile it is given:
     // that place is in the profile too, so a dump goes with it, and the user's own Chrome keeps none of the kit's.
     const kit = chromesUnder(tmp).find((p) => p.parent === process.pid);
-    const profile = /--user-data-dir=(\S+)/.exec(fs.readFileSync(`/proc/${kit.pid}/cmdline`, "utf8").replace(/\0/g, " "))[1];
+    // Chrome writes its command line again as one line, its arguments joined by spaces, so the profile is the folder of
+    // the test's own temporary folder that follows --user-data-dir=, whose name holds no space, whatever that folder's
+    // path holds.
+    const command = fs.readFileSync(`/proc/${kit.pid}/cmdline`, "utf8").replace(/\0/g, " ");
+    const given = `--user-data-dir=${tmp}${path.sep}`;
+    assert.ok(command.includes(given), command);
+    const profile = path.join(tmp, command.slice(command.indexOf(given) + given.length).split(/[\s/]/)[0]);
     assert.ok(fs.readFileSync(told, "utf8").split("\n").includes(`CHROME_CONFIG_HOME=${path.join(profile, "config")}`), fs.readFileSync(told, "utf8"));
     const handlers = holding("--database=").map((pid) => fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ")).filter((command) => command.includes(path.basename(profile)));
     for (const command of handlers) assert.ok(command.includes(`--database=${path.join(profile, "config")}${path.sep}`), command);

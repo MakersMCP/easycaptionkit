@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { spawnSync } = require("node:child_process");
-const { run, write, video, dir, hasFfmpeg, evenWords, CLI } = require("./helpers");
+const { run, write, video, dir, notOnPath, hasFfmpeg, evenWords, CLI } = require("./helpers");
 const programs = require("../skills/easycaptionkit/scripts/lib/programs");
 
 const INSTALL = "brew install ffmpeg, sudo apt install ffmpeg or winget install ffmpeg";
@@ -309,7 +309,7 @@ test("an ffmpeg, ffprobe or Chrome that cannot be started or does not answer as 
     refused({ FFPROBE_PATH: "no-program-by-this-name" }, ["subtitles", words, "--video", clip], `easycaptionkit needs ffprobe, and FFPROBE_PATH names no-program-by-this-name, which is not on PATH. ${ADVICE.FFPROBE_PATH}`);
     refused({ CHROME_PATH: "no-program-by-this-name" }, [clip, "--words", words], `easycaptionkit needs Chrome, and CHROME_PATH names no-program-by-this-name, which is not on PATH. ${ADVICE.CHROME_PATH}`);
   });
-  await t.test("a name found on PATH that is not the program asked for", () => {
+  await t.test("a name found on PATH that is not the program asked for", { skip: notOnPath }, () => {
     const PATH = `${at("failing")}${path.delimiter}${base.PATH}`;
     refused({ PATH, FFMPEG_PATH: "ffmpeg" }, [clip, "--words", words, "--libass"], `easycaptionkit needs ffmpeg, and FFMPEG_PATH names ffmpeg, found on PATH at ${at("failing", "ffmpeg")}, which did not run as ffmpeg: it printed "something went wrong" and exited with 3. ${ADVICE.FFMPEG_PATH}`);
   });
@@ -334,13 +334,13 @@ test("an ffmpeg, ffprobe or Chrome that cannot be started or does not answer as 
   fs.mkdirSync(at("broken-chrome"), { recursive: true });
   fs.copyFileSync(at("pe", "chrome"), at("broken-chrome", "google-chrome"));
   const onPath = (where, name, words) => `easycaptionkit needs ${NAME[name] || "Chrome"}, and the ${name} on PATH, ${at(where, name)}, ${words}. ${ADVICE[name] || ADVICE.chrome}`;
-  await t.test("a PATH whose first match is a folder, with nothing after it", () => {
+  await t.test("a PATH whose first match is a folder, with nothing after it", { skip: notOnPath }, () => {
     refused({ PATH: at("folder") }, [clip, "--words", words, "--libass"], onPath("folder", "ffmpeg", "is a folder"));
     refused({ PATH: at("folder"), FFMPEG_PATH: at("lone", "ffmpeg") }, ["subtitles", words, "--video", clip], onPath("folder", "ffprobe", "is a folder"));
     refused({ PATH: at("chromes"), FFMPEG_PATH: found.ffmpeg, FFPROBE_PATH: found.ffprobe }, [clip, "--words", words], onPath("chromes", "google-chrome", "is a folder"));
     refused({ PATH: `${at("dangling")}${path.delimiter}${at("unmarked")}` }, [clip, "--words", words, "--libass"], onPath("dangling", "ffmpeg", "is a link to a file that is not there"));
   });
-  await t.test("a PATH whose first match is a file that runs and does not answer", () => {
+  await t.test("a PATH whose first match is a file that runs and does not answer", { skip: notOnPath }, () => {
     const PATH = `${at("pe")}${path.delimiter}${base.PATH}`;
     refused({ PATH }, [clip, "--words", words, "--libass"], onPath("pe", "ffmpeg", printed(at("pe", "ffmpeg"), "ffmpeg")));
     refused({ PATH, FFMPEG_PATH: at("lone", "ffmpeg") }, ["subtitles", words, "--video", clip], onPath("pe", "ffprobe", printed(at("pe", "ffprobe"), "ffprobe")));

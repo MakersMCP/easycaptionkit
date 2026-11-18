@@ -9,7 +9,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { parse, dryRun } = require("../skills/easycaptionkit/scripts/easycaptionkit");
-const { run, write, video, dir, hasFfmpeg, evenWords, CLI } = require("./helpers");
+const { run, write, video, dir, notOnPath, hasFfmpeg, evenWords, CLI } = require("./helpers");
 const { wordsSha256 } = require("../skills/easycaptionkit/scripts/lib/words");
 const { arg } = require("../skills/easycaptionkit/scripts/lib/report");
 
@@ -1122,7 +1122,7 @@ test("a path in a printed command reaches the program as it is, in sh, bash and 
   }
 });
 
-test("the commands a run prints start with the program as the run was started: npx's copy with npx, the command npm puts on PATH by its name, else node and the script", () => {
+test("the commands a run prints start with the program as the run was started: npx's copy with npx, the command npm puts on PATH by its name, else node and the script", async (t) => {
   const { programOf } = require("../skills/easycaptionkit/scripts/lib/report");
   const nowhere = { pathTo: () => "" };
   assert.equal(programOf("/home/me/.npm/_npx/0a1b/node_modules/easycaptionkit/skills/easycaptionkit/scripts/easycaptionkit.js", nowhere), "npx easycaptionkit@latest");
@@ -1154,17 +1154,19 @@ test("the commands a run prints start with the program as the run was started: n
     // Run by its path, without npm, it is run by its path again.
     assert.equal(programOf(local, { pathTo: () => local, env: {} }), `node ${arg(local)}`);
     // The PATH npm gives: the project's node_modules/.bin first, then the shell's.
-    const before = process.env.PATH;
-    try {
-      process.env.PATH = [path.dirname(local), path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter);
-      assert.equal(programOf(local, { env: npx }), "npx easycaptionkit");
-      // npm install -g's link, on the shell's PATH after npm's folder, is still the shell's.
-      process.env.PATH = [path.dirname(local), path.dirname(link), "/usr/bin"].join(path.delimiter);
-      assert.equal(programOf(CLI, { env: npx }), "easycaptionkit");
-    } finally {
-      if (before === undefined) delete process.env.PATH;
-      else process.env.PATH = before;
-    }
+    await t.test("with those folders on PATH", { skip: notOnPath }, () => {
+      const before = process.env.PATH;
+      try {
+        process.env.PATH = [path.dirname(local), path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter);
+        assert.equal(programOf(local, { env: npx }), "npx easycaptionkit");
+        // npm install -g's link, on the shell's PATH after npm's folder, is still the shell's.
+        process.env.PATH = [path.dirname(local), path.dirname(link), "/usr/bin"].join(path.delimiter);
+        assert.equal(programOf(CLI, { env: npx }), "easycaptionkit");
+      } finally {
+        if (before === undefined) delete process.env.PATH;
+        else process.env.PATH = before;
+      }
+    });
   }
   assert.equal(programOf(""), "npx easycaptionkit@latest");
 });
@@ -1426,7 +1428,7 @@ test("why Chrome stopped: its FATAL line, not crashpad's noise, and a temporary 
   assert.equal(whyStopped(noise, "/tmp"), "");
 });
 
-test("CHROME_PATH takes a bare name from PATH, as FFMPEG_PATH does, and a path from the folder the run starts in", { skip: process.platform === "win32" && "needs a shell script" }, () => {
+test("CHROME_PATH takes a bare name from PATH, as FFMPEG_PATH does, and a path from the folder the run starts in", { skip: process.platform === "win32" && "needs a shell script" }, async (t) => {
   const { findChrome } = require("../skills/easycaptionkit/scripts/lib/chrome");
   const bin = path.join(dir, "chrome-bin");
   fs.mkdirSync(bin, { recursive: true });
@@ -1434,9 +1436,11 @@ test("CHROME_PATH takes a bare name from PATH, as FFMPEG_PATH does, and a path f
   fs.writeFileSync(fake, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
   const saved = { PATH: process.env.PATH, CHROME_PATH: process.env.CHROME_PATH, cwd: process.cwd() };
   try {
-    process.env.PATH = `${bin}${path.delimiter}${saved.PATH}`;
-    process.env.CHROME_PATH = "my-chrome";
-    assert.equal(findChrome(), fake);
+    await t.test("a bare name from PATH", { skip: notOnPath }, () => {
+      process.env.PATH = `${bin}${path.delimiter}${saved.PATH}`;
+      process.env.CHROME_PATH = "my-chrome";
+      assert.equal(findChrome(), fake);
+    });
     process.chdir(dir);
     process.env.CHROME_PATH = path.join("chrome-bin", "my-chrome");
     assert.equal(findChrome(), fake);
