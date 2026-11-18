@@ -16,7 +16,7 @@ const { srt, vtt, ass, assFont, facesAt, kitLetters, estimatedScales, shrunkOf, 
 const { machineLetters, chromeBoxes, boxesIn } = require("./boxes");
 const { captionLayout, charsThatFit, defaultPlaces, shapeOf } = require("./places");
 const { chooseLook, variableFace, machineFont, fallbackFont } = require("./look");
-const { fontLike, woff2Like } = require("./fontfile");
+const { notFont, woff2Like } = require("./fontfile");
 const { quoted } = require("./programs");
 const ffmpeg = require("./ffmpeg");
 const { chromeReady, chromeProblem, tempProblem } = require("./chrome");
@@ -889,25 +889,32 @@ const boxesNotes = (boxes) => (boxes.length ? [`${boxesText(boxes, "chrome")} ${
 const fontsFolder = (look, dir) => (look.from === "fonts.css" && look.faces.length ? path.relative(path.resolve(dir), path.dirname(look.faces[0].file)) || "." : "");
 
 // The folder ffmpeg's ass filter finds the look's font files in, { dir,
-// names }: a folder of the work folder that holds those files alone, each
-// linked, or copied where no link can be made, and the name each has there
-// with the file it is, or no folder when the look has none. libass reads
-// every file of the folder it is given into memory, and the folder of a
-// fonts.css made elsewhere can hold any file next to its fonts, which that
-// fonts.css can name too: a file past 64 MB, or one that does not start as
-// a font file does, which the kit's own measuring passes over too, is no
-// font libass can use, and is left out. libass passes over a file whose
-// name starts with a dot, and names one it cannot open by its name, which
-// a line break cuts in two and in which ffmpeg writes other control
-// characters as ?, so such a file goes in as font, with its extension.
+// names, left }: a folder of the work folder that holds those files alone,
+// each linked, or copied where no link can be made, and the name each has
+// there with the file it is, or no folder when the look has none. libass
+// reads every file of the folder it is given into memory, and the folder
+// of a fonts.css made elsewhere can hold any file next to its fonts, which
+// that fonts.css can name too: a file past 64 MB, or one that does not
+// start as a font file does, which the kit's own measuring passes over
+// too, is no font libass can use, and is left out, as is one that cannot
+// be read. `left` gives each such file with why, [{ file, why }]. libass
+// passes over a file whose name starts with a dot, and names one it cannot
+// open by its name, which a line break cuts in two and in which ffmpeg
+// writes other control characters as ?, so such a file goes in as font,
+// with its extension.
 function fontsOfLook(look, work) {
   const names = new Map();
-  if (!look.faces.length) return { dir: "", names };
+  const left = [];
+  if (!look.faces.length) return { dir: "", names, left };
   const dir = path.join(work, "fonts");
   fs.mkdirSync(dir);
   const taken = new Set();
   for (const file of new Set(look.faces.map((f) => f.file))) {
-    if (!fontLike(file)) continue;
+    const why = notFont(file);
+    if (why) {
+      left.push({ file, why });
+      continue;
+    }
     const own = path.basename(file);
     const base = /^\.|[\u0000-\u001f]/.test(own) ? `font${/^\.\w+$/.test(path.extname(own)) ? path.extname(own) : ""}` : own;
     let name = base;
@@ -920,24 +927,38 @@ function fontsOfLook(look, work) {
         fs.copyFileSync(file, path.join(dir, name));
       } catch {
         // A file that cannot be read is no font libass can use.
+        left.push({ file, why: "cannot be read" });
         continue;
       }
     }
     names.set(name, file);
   }
-  return { dir, names };
+  return { dir, names, left };
+}
+
+// Font files of the look by the names fonts.css gives them, three at most
+// and how many more, and whether there is one or more.
+function filesOfLook(look, files) {
+  const names = files.map((file) => shown(look.faces.find((f) => f.file === file).name));
+  const which = names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : list(names);
+  return `${which}, ${names.length === 1 ? "a font file" : "font files"} fonts.css gives for ${look.family}`;
 }
 
 // What a run says of the font files of the look this ffmpeg's libass
-// cannot open, [{ file, line }] (see libassUnopened): which, by the names
-// fonts.css gives them, what libass said of the first, and what to do. A
-// WOFF2 file opens where ffmpeg's FreeType reads WOFF2, and Chrome reads
-// WOFF2.
+// cannot use, [{ file, line }] (see libassUnopened): which, what libass
+// said of the first, and what to do. A WOFF2 file opens where ffmpeg's
+// FreeType reads WOFF2, and Chrome reads WOFF2.
 function unopenedText(look, unopened) {
-  const names = unopened.map((u) => shown(look.faces.find((f) => f.file === u.file).name));
-  const which = names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : list(names);
-  const ways = unopened.some((u) => woff2Like(u.file)) ? "give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2" : "or give fonts.css a file of the font that libass opens";
-  return `This ffmpeg's libass cannot open ${which}, ${names.length === 1 ? "a font file" : "font files"} fonts.css gives for ${look.family}: it said ${quoted(unopened[0].line)}. Leave out --libass to have Chrome draw the captions, ${ways}`;
+  const ways = unopened.some((u) => woff2Like(u.file)) ? "give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2" : "or give fonts.css a file of the font that libass can use";
+  return `This ffmpeg's libass cannot use ${filesOfLook(look, unopened.map((u) => u.file))}: it said ${quoted(unopened[0].line)}. Leave out --libass to have Chrome draw the captions, ${ways}`;
+}
+
+// What a run says of the font files of the look it does not give libass,
+// [{ file, why }] (see fontsOfLook): which, why, and what to do.
+function leftText(look, left) {
+  const why = [...new Set(left.map((l) => l.why))];
+  const reason = why.length > 1 ? `${why.slice(0, -1).join(", ")} or ${why[why.length - 1]}` : why[0];
+  return `libass cannot be given ${filesOfLook(look, left.map((l) => l.file))}: ${left.length === 1 ? "it" : "each"} ${reason}, and easycaptionkit gives libass no such file. Leave out --libass to have Chrome draw the captions, or give fonts.css another file of the font`;
 }
 
 // What fontconfig gives for a letter the font of captions.ass lacks, for
@@ -1065,13 +1086,15 @@ async function captionVideo(videoFile, options) {
     const unit = options.style === "word" ? ["word", "words"] : ["caption", "captions"];
     if (useLibass) {
       // Where captions.ass sets a letter in the font of fonts.css, a file of
-      // the faces it draws with that libass cannot open stops the run before
-      // anything is drawn, as libass would draw another font in its place.
-      // Where it sets every letter in another font, as Japanese over a Latin
-      // font, and for the faces of other weights and styles, which captions.ass
-      // draws nothing with, libass is not asked.
+      // the faces it draws with that libass cannot use, or is not given,
+      // stops the run before anything is drawn, as libass would draw another
+      // font in its place. Where it sets every letter in another font, as
+      // Japanese over a Latin font, and for the faces of other weights and
+      // styles, which captions.ass draws nothing with, libass is not asked.
       const fonts = fontsOfLook(look, run.work);
       const drawing = new Set(letters.own > 0 ? facesAt(look).map((f) => f.file) : []);
+      const left = fonts.left.filter((l) => drawing.has(l.file));
+      if (left.length) throw new Error(leftText(look, left));
       const asked = [...fonts.names].filter(([, file]) => drawing.has(file)).map(([name]) => name);
       const unopened = await ffmpeg.libassUnopened(bins, run.work, fonts.dir, asked);
       if (unopened.length) throw new Error(unopenedText(look, unopened.map((u) => ({ file: fonts.names.get(u.name), line: u.line }))));

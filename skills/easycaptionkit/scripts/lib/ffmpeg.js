@@ -876,14 +876,15 @@ async function libassFollows(bins, dir, caps) {
 }
 
 // The font files of the folder `fontsDir` that this ffmpeg's libass cannot
-// open, as [{ name, line }]: each of `names`, the files the kit put there,
-// that libass says it could not open, and the words it said it in. libass
-// then draws a font of the machine's in its place, and says so only at a
-// level -loglevel error leaves out: the static builds of ffmpeg BtbN makes
-// have a FreeType that reads no WOFF2 file, and the files easyfontkit saves
-// are WOFF2 files where the site's are. So libass is asked once, in the
-// folder `dir`, with the fonts folder the burn gives it and nothing to
-// draw, and says what it could not open as its filter starts. An ffmpeg
+// use, as [{ name, line }]: each of `names`, the files the kit put there,
+// that libass says it could not open, or opened and could not read the
+// names of, and the words it said it in. libass then draws a font of the
+// machine's in its place, and says so only at a level -loglevel error
+// leaves out: the static builds of ffmpeg BtbN makes have a FreeType that
+// reads no WOFF2 file, and the files easyfontkit saves are WOFF2 files
+// where the site's are. So libass is asked once, in the folder `dir`, with
+// the fonts folder the burn gives it and nothing to draw, and says what it
+// could not use as its filter starts. An ffmpeg
 // that ends otherwise than with code 0 and names no file may have ended
 // before that, as it opens its input first, so it stops the run with how
 // it ended, as the burn would: one built without its lavfi device says
@@ -905,16 +906,19 @@ async function libassUnopened(bins, dir, fontsDir, names) {
   }
 }
 
-// Which of the font files `names` libass said it could not open, in what
+// Which of the font files `names` libass said it could not use, in what
 // ffmpeg printed, `stderr`: as libass 0.15 to 0.17 say it, "Error opening
-// memory font 'inter.woff2'", once for each time ffmpeg starts the filter,
-// read by the words after the "[Parsed_ass_0 @ 0x...]" that starts the
-// line. [{ name, line }], with those words.
+// memory font 'inter.woff2'" for one it could not open, and "Error getting
+// metadata for embedded font 'inter.ttf'" for one whose names it could not
+// read, as a file with no family name, which it passes over. Once for each
+// time ffmpeg starts the filter, read by the words after the
+// "[Parsed_ass_0 @ 0x...]" that starts the line. [{ name, line }], with
+// those words.
 function unopenedOf(stderr, names) {
   const said = new Map();
   for (const line of String(stderr || "").split(/\r?\n|\r/)) {
     const words = line.replace(/^(?:\[[^\]]*\]\s*)+/, "").trim();
-    const m = /^Error opening memory font '(.*)'$/.exec(words);
+    const m = /^Error (?:opening memory font|getting metadata for embedded font) '(.*)'$/.exec(words);
     if (m) said.set(m[1], words);
   }
   return names.filter((name) => said.has(name)).map((name) => ({ name, line: said.get(name) }));

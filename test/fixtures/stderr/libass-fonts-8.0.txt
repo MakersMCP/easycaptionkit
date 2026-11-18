@@ -1,2 +1,4 @@
-[Parsed_ass_0 @ 0x5975ed1405c0] Error opening memory font 'broken.woff2'
-[Parsed_ass_0 @ 0x7be86c004400] Error opening memory font 'broken.woff2'
+[Parsed_ass_0 @ 0x59f919b95580] Error getting metadata for embedded font 'noname.ttf'
+[Parsed_ass_0 @ 0x59f919b95580] Error opening memory font 'broken.woff2'
+[Parsed_ass_0 @ 0x729724004380] Error getting metadata for embedded font 'noname.ttf'
+[Parsed_ass_0 @ 0x729724004380] Error opening memory font 'broken.woff2'

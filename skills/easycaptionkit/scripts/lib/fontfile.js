@@ -324,29 +324,39 @@ function loadFont(file, index = 0, budget = Infinity) {
 const KINDS = new Set(["wOF2", "wOFF", "ttcf", "\u0000\u0001\u0000\u0000", "OTTO", "true"]);
 
 // The first four bytes of a file of no more than MOST bytes, as text, or
-// "" for anything else. Only they are read, so a video named as a font is
-// not.
+// "" for anything else, with why there are none: { head, why }, why being
+// words that follow the file's name, "is past 64 MB", "does not start as a
+// font file does", "is no file" or "cannot be read". Only those bytes are
+// read, so a video named as a font is not.
 function headOf(file) {
   let fd;
   try {
     const stat = fs.statSync(file);
-    if (!stat.isFile() || stat.size > MOST) return "";
+    if (!stat.isFile()) return { head: "", why: "is no file" };
+    if (stat.size > MOST) return { head: "", why: `is past ${MOST / 1048576} MB` };
     fd = fs.openSync(file, "r");
     const head = Buffer.alloc(4);
-    return fs.readSync(fd, head, 0, 4, 0) === 4 ? tag(head, 0) : "";
+    return fs.readSync(fd, head, 0, 4, 0) === 4 ? { head: tag(head, 0), why: "" } : { head: "", why: "does not start as a font file does" };
   } catch {
-    return "";
+    return { head: "", why: "cannot be read" };
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
   }
 }
 
-// Whether a file is one loadFont would read: a file of no more than MOST
-// bytes that starts as a font file does.
-const fontLike = (file) => KINDS.has(headOf(file));
+// Why a file is none loadFont would read, as words that follow its name
+// (see headOf), or "" for a file of no more than MOST bytes that starts as
+// a font file does.
+function notFont(file) {
+  const { head, why } = headOf(file);
+  return why || (KINDS.has(head) ? "" : "does not start as a font file does");
+}
+
+// Whether a file is one loadFont would read.
+const fontLike = (file) => !notFont(file);
 
 // Whether a font file starts as a WOFF2 file does.
-const woff2Like = (file) => headOf(file) === "wOF2";
+const woff2Like = (file) => headOf(file).head === "wOF2";
 
 // The ASS font size for a font whose em is one pixel. libass, as VSFilter
 // does, makes the font as tall as its OS/2 winAscent and winDescent: an
@@ -359,4 +369,4 @@ function assScale(font) {
   return height > 0 ? height / font.unitsPerEm : 0;
 }
 
-module.exports = { readFont, loadFont, assScale, fontLike, woff2Like };
+module.exports = { readFont, loadFont, assScale, fontLike, notFont, woff2Like };
