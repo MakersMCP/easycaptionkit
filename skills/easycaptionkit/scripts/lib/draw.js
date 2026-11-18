@@ -266,6 +266,9 @@ async function plainPictures({ bins, video, output, cues, times = [], zones, cue
   let r = await run(bins.ffmpeg, ["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-f", "apng", "-i", path.basename(strip), "-vf", `tile=${columns}x${rows}:padding=12:margin=12:color=0x15161a`, "-frames:v", "1", "-update", "1", path.resolve(sheetFile)], { cwd: dir });
   if (r.code !== 0) throw new Error(`ffmpeg could not make sheet.png: ${whyFailed(r)}`);
   const frame = await frameAt(bins, output, shotOf(cue, times).seek, path.join(dir, "zone-frame.png"), { width: 0, ...frameTags });
+  // The frame goes by its name, with ffmpeg in its folder, as sheet.apng
+  // does: ffmpeg reads a PNG with its png_pipe demuxer, which knows no
+  // -pattern_type, so a folder whose path held a % stopped the run here.
   const inputs = [];
   const parts = [];
   zones.forEach((zone, i) => {
@@ -276,11 +279,11 @@ async function plainPictures({ bins, video, output, cues, times = [], zones, cue
     const boxes = [box(0, 0, W, m.top), box(0, H - m.bottom, W, m.bottom), box(0, m.top, m.left, H - m.top - m.bottom), box(W - m.right, m.top, m.right, H - m.top - m.bottom)];
     if (zone.column) boxes.push(box(W - zone.column.width, zone.column.from, zone.column.width, Math.max(1, H - m.bottom - zone.column.from)));
     boxes.push(`drawbox=x=${Math.round(m.left)}:y=${Math.round(m.top)}:w=${Math.round(W - m.left - m.right)}:h=${Math.round(H - m.top - m.bottom)}:color=0x7cff9b:t=4`);
-    inputs.push(...(frame.includes("%") ? ["-pattern_type", "none"] : []), "-i", frame);
+    inputs.push("-i", path.basename(frame));
     parts.push(`[${i}:v]${boxes.join(",")},scale=-2:640,pad=iw+24:ih+24:12:12:color=0x15161a[p${i}]`);
   });
   const graph = zones.length > 1 ? `${parts.join(";")};${zones.map((_, i) => `[p${i}]`).join("")}hstack=inputs=${zones.length}[out]` : `${parts[0]};[p0]null[out]`;
-  r = await run(bins.ffmpeg, ["-hide_banner", "-nostdin", "-y", "-loglevel", "error", ...inputs, "-filter_complex", graph, "-map", "[out]", "-frames:v", "1", "-update", "1", zonesFile]);
+  r = await run(bins.ffmpeg, ["-hide_banner", "-nostdin", "-y", "-loglevel", "error", ...inputs, "-filter_complex", graph, "-map", "[out]", "-frames:v", "1", "-update", "1", path.resolve(zonesFile)], { cwd: dir });
   if (r.code !== 0) throw new Error(`ffmpeg could not make safe-zones.png: ${whyFailed(r)}`);
   return picked.length;
 }

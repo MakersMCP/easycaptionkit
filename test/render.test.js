@@ -1757,6 +1757,12 @@ test("without Chrome, --libass draws the captions with ffmpeg, and the pictures 
   assert.equal(c.drawnWith, "libass");
   assert.deepEqual(c.places.map((p) => p.place), ["youtube", "x", "linkedin"]);
   for (const name of ["captioned.mp4", "sheet.png", "safe-zones.png", "captions.ass"]) assert.ok(fs.statSync(path.join(folder, name)).size > 0, name);
+  // An out folder given from the folder the run starts in, whose name holds a %, which ffmpeg's image2 demuxer reads as
+  // a numbered sequence: ffmpeg made sheet.png and safe-zones.png there too, where the run had stopped at the end with
+  // "ffmpeg could not make safe-zones.png: Option pattern_type not found."
+  const pct = caption([video, "--words", words, "--libass", "--style", "line", "--out", "libass 100%x"], { cwd: h.dir, env: { ...process.env, CHROME_PATH: "/nonexistent/chrome" } });
+  assert.equal(pct.drawnWith, "libass");
+  for (const name of ["sheet.png", "safe-zones.png"]) assert.ok(fs.statSync(path.join(h.dir, "libass 100%x", name)).size > 0, name);
   // A TMPDIR that names no folder, where Chrome would keep its profile: ffmpeg makes the pictures, and says why.
   if (process.platform !== "win32") {
     const nowhere = out("no-such-tmp");
