@@ -2031,7 +2031,7 @@ test("subtitles only: the files from the words, for a video's size, the video un
   const kit = h.fontKit("fonts-for-ass", { family: "Kitface" });
   const kitted = out("subs-kit");
   caption(["subtitles", words, "--video", video, "--fonts", kit, "--out", kitted]);
-  const row = /\n\| captions\.ass \| .*; its font is a file of fonts\.css in `([^`]+)`, which the filter finds when that is its fontsdir, as in `([^`]+)` run in this folder, and a player once the font is installed \|\n/.exec(fs.readFileSync(path.join(kitted, "CAPTIONS.md"), "utf8"));
+  const row = /\n\| captions\.ass \| .*; its font is a file of fonts\.css in `([^`]+)`, the folder `([^`]+)` run in this folder gives the filter as its fontsdir, and a player needs the font installed \|\n/.exec(fs.readFileSync(path.join(kitted, "CAPTIONS.md"), "utf8"));
   assert.ok(row, fs.readFileSync(path.join(kitted, "CAPTIONS.md"), "utf8"));
   assert.equal(path.resolve(kitted, row[1]), path.join(kit, "files"));
   assert.equal(row[2], `ass=captions.ass:fontsdir=${row[1]}:shaping=complex`);

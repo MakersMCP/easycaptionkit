@@ -8,6 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { variableFace, sameName } = require("./look");
 const { onPath } = require("./ffmpeg");
+const { facesAt } = require("./subtitles");
 const { FORMATS } = require("./words");
 
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
@@ -167,19 +168,25 @@ function assFontText(f) {
   return { name: look.family, more: `${look.family} was asked for by name, and captions.ass is sized for Arial's heights: nothing here says what this machine gives for that name.` };
 }
 
-// Where ffmpeg's ass filter finds a font of fonts.css, which is on no
-// machine's list of fonts, for the captions.ass row of a table: in its
-// folder, from the folder of captions.ass, given as the filter's
-// fontsdir. A player draws it once it is installed.
+// Where a font of fonts.css is, which is on no machine's list of fonts,
+// for the captions.ass row of a table: its folder, from the folder of
+// captions.ass, and the ass filter that is given that folder as its
+// fontsdir, run there. Whether libass draws the font from that folder is
+// this ffmpeg's to say, as one whose FreeType reads no WOFF2 opens none of
+// the WOFF2 files easyfontkit saves (the README's Limits), and the row says
+// nothing of it. libass passes over a file whose name starts with a dot in
+// a folder, so where captions.ass draws with such a file the row gives the
+// folder alone. A player needs the font installed.
 function fontsWhere(f) {
   if (!f.assFonts) return "";
   const cell = (text) => code(shown(text)).replace(/\|/g, "\\|");
   // A folder of plain letters goes into the filter as it is.
   const filter = `ass=captions.ass:fontsdir=${/^[\w./@%+=-]+$/.test(f.assFonts) ? f.assFonts : "<that folder>"}:shaping=complex`;
+  const hidden = facesAt(f.look).some((x) => path.basename(x.file).startsWith("."));
   // Where Chrome drew the captions, libass's letters are thinner than its,
   // and a subtitles run says so where it says what captions.ass draws.
   const thin = !f.subtitlesOnly && f.drawnWith !== "libass" ? thinner(f, "in captioned.mp4", cell) : "";
-  return `; its font is a file of fonts.css in ${cell(f.assFonts)}, which the filter finds when that is its fontsdir, as in ${cell(filter)} run in this folder, and a player once the font is installed${thin ? `. ${thin.replace(/\.$/, "")}` : ""}`;
+  return `; its font is a file of fonts.css in ${cell(f.assFonts)}${hidden ? "" : `, the folder ${cell(filter)} run in this folder gives the filter as its fontsdir`}, and a player needs the font installed${thin ? `. ${thin.replace(/\.$/, "")}` : ""}`;
 }
 
 // That libass draws a variable font file of fonts.css at its default

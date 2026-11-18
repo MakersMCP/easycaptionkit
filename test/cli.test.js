@@ -1812,7 +1812,13 @@ test("CAPTIONS.md and the summary say what drew the letters when the font asked 
   assert.match(odd, /easyfontkit read Inter as under constructor\./);
   // Where Chrome drew the captions, or no video was captioned, the filter that burns captions.ass draws such a file thinner too.
   const drawnThin = captionsMarkdown(facts({ look: variable, fontsDrawn: [{ family: "Geist", glyphs: 20, custom: true }], assFonts: "../kit/files", assLetters: { total: 20, own: 20 } }));
-  assert.match(drawnThin, /\| captions\.ass \| .*`ass=captions\.ass:fontsdir=\.\.\/kit\/files:shaping=complex` run in this folder, and a player once the font is installed\. libass draws `files\/geist-variable\.woff2`, a file of the weights 100 to 900, at its default weight, not at 700, so the letters come out thinner than in captioned\.mp4 \|\n/);
+  assert.match(drawnThin, /\| captions\.ass \| .*; its font is a file of fonts\.css in `\.\.\/kit\/files`, the folder `ass=captions\.ass:fontsdir=\.\.\/kit\/files:shaping=complex` run in this folder gives the filter as its fontsdir, and a player needs the font installed\. libass draws `files\/geist-variable\.woff2`, a file of the weights 100 to 900, at its default weight, not at 700, so the letters come out thinner than in captioned\.mp4 \|\n/);
+  // It says nothing of whether the filter draws the font from that folder, which an ffmpeg whose FreeType reads no WOFF2,
+  // as the hosted worker's 9.0.2, does not, and where the file's name starts with a dot, which libass passes over in a
+  // folder, it gives the folder alone.
+  assert.doesNotMatch(drawnThin, /finds/);
+  const dotted = { ...variable, faces: variable.faces.map((x) => ({ ...x, file: "/k/files/.geist-variable.woff2", name: "files/.geist-variable.woff2" })) };
+  assert.match(captionsMarkdown(facts({ look: dotted, fontsDrawn: [{ family: "Geist", glyphs: 20, custom: true }], assFonts: "../kit/files", assLetters: { total: 20, own: 20 } })), /\| captions\.ass \| .*; its font is a file of fonts\.css in `\.\.\/kit\/files`, and a player needs the font installed\. libass draws/);
   assert.doesNotMatch(captionsMarkdown({ ...thin, assFonts: "../kit/files" }), /come out thinner/);
   const subsThin = subtitlesMarkdown({ ...facts(), subtitlesOnly: true, video: null, frame: { width: 1080, height: 1920 }, look: variable, assFonts: "../kit/files", layout: { ...place, zones: undefined, maxChars: 14, lines: 2, assMaxChars: 14, assCues: 1 }, rerun: {} });
   assert.match(subsThin, /letters in Geist from fonts\.css, up to 14 characters a line\. libass draws files\/geist-variable\.woff2, a file of the weights 100 to 900, at its default weight, not at 700, so the letters come out thinner\. No font goes with these files/);
