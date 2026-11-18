@@ -354,7 +354,11 @@ test("an ffmpeg, ffprobe or Chrome that cannot be started or does not answer as 
   fs.mkdirSync(mount, { recursive: true });
   const namespaced = spawnSync("unshare", ["-rm", "sh", "-c", 'mount -t tmpfs -o noexec,size=1m tmpfs "$1"', "sh", mount], { encoding: "utf8" }).status === 0;
   await t.test("a file on a file system mounted noexec", { skip: !namespaced && "needs unshare to mount a file system of its own" }, () => {
-    const inside = (role, mode) => (args, options) => spawnSync("unshare", ["-rm", "sh", "-c", 'mount -t tmpfs -o noexec,size=64m tmpfs "$1" && cp "$2" "$1/$3" && chmod "$4" "$1/$3" && shift 4 && exec "$@"', "sh", mount, fs.realpathSync(found[role === "chrome" ? "ffmpeg" : role]), role, mode, process.execPath, CLI, ...args], { encoding: "utf8", timeout: 600_000, ...options });
+    // The run refuses the file without running it, so any file does: a small one, where a static ffmpeg of 173 MB, as
+    // the hosted worker's is, would not fit.
+    const small = at("noexec-program");
+    fs.writeFileSync(small, "#!/bin/sh\nexit 0\n");
+    const inside = (role, mode) => (args, options) => spawnSync("unshare", ["-rm", "sh", "-c", 'mount -t tmpfs -o noexec,size=1m tmpfs "$1" && cp "$2" "$1/$3" && chmod "$4" "$1/$3" && shift 4 && exec "$@"', "sh", mount, small, role, mode, process.execPath, CLI, ...args], { encoding: "utf8", timeout: 600_000, ...options });
     for (const [mode, what] of [["755", "may not be run: permission denied"], ["644", "is not executable"]]) {
       refused({ FFMPEG_PATH: path.join(mount, "ffmpeg"), FFPROBE_PATH: found.ffprobe }, [clip, "--words", words, "--libass"], pointed("ffmpeg", path.join(mount, "ffmpeg"), what), { spawn: inside("ffmpeg", mode) });
       refused({ FFPROBE_PATH: path.join(mount, "ffprobe") }, ["subtitles", words, "--video", clip], pointed("ffprobe", path.join(mount, "ffprobe"), what), { spawn: inside("ffprobe", mode) });

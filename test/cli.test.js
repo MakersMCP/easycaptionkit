@@ -272,7 +272,10 @@ test("files that are not there, a folder that cannot be written, a link to nowhe
     }
     for (const [folder, what] of [[near, "is not executable"], [nearFolder, "is a folder"]]) {
       for (const args of [[__filename, "--words", words, "--libass"], ["subtitles", words, "--video", __filename]]) {
-        const r = run([...args, "--out", path.join(dir, "cli-g")], { env: { ...process.env, FFMPEG_PATH: path.join(folder, "ffmpeg") } });
+        // The ffprobe next to the ffmpeg named, which an FFPROBE_PATH set where the tests run would stand in for.
+        const env = { ...process.env, FFMPEG_PATH: path.join(folder, "ffmpeg") };
+        delete env.FFPROBE_PATH;
+        const r = run([...args, "--out", path.join(dir, "cli-g")], { env });
         assert.equal(r.status, 1);
         assert.equal(r.stderr, `easycaptionkit: easycaptionkit needs ffprobe, and the ffprobe next to ${path.join(folder, "ffmpeg")}, ${path.join(folder, "ffprobe")}, ${what}. Set FFPROBE_PATH to an ffprobe that runs.\n`);
       }

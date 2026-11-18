@@ -407,9 +407,9 @@ test("the captioned video keeps each sound track's language and the chapters, le
   assert.deepEqual(twoJson.output.audio, [{ codec: "aac", channels: 2, rate: 48000, copied: true }, { codec: "aac", channels: 6, rate: 48000, copied: false, from: "ac3" }]);
   assert.ok(twoJson.notes.includes("Sound track 2 (ac3) was made AAC at 384k, at the same rate, since MP4 players do not take ac3."), twoJson.notes.join(" | "));
   assert.match(fs.readFileSync(path.join(folder, "two-sounds", "CAPTIONS.md"), "utf8"), /\| captioned\.mp4 \| 360x640, [\d.]+ fps, 2(?:\.\d+)? s, H\.264 \(\w+\), sound copied as it was, track 2 \(ac3\) made AAC \|/);
-  // The first track decodes to what it was.
-  const decoded = (file) => spawnSync("ffmpeg", ["-hide_banner", "-v", "error", "-i", file, "-map", "0:a:0", "-f", "md5", "-"], { encoding: "utf8" }).stdout.trim();
-  assert.equal(decoded(path.join(folder, "two-sounds", "captioned.mp4")), decoded(tracks));
+  // The first track has the packets it had. Decoded, they differ on ffmpeg 9, which takes off the AAC encoder's delay
+  // and padding as each file states them, Matroska otherwise than MP4.
+  assert.equal(h.audioMd5(path.join(folder, "two-sounds", "captioned.mp4")), h.audioMd5(tracks));
   const { soundText } = require("../skills/easycaptionkit/scripts/lib/report");
   assert.equal(soundText([]), "no sound");
   assert.equal(soundText([{ copied: false, from: "pcm_s16le" }]), "sound made AAC");
@@ -852,12 +852,15 @@ test("the caption states go to ffmpeg as one animated PNG, each frame at its own
 });
 
 // An ffmpeg that says it is Ubuntu 22.04's 4.4, has no -fps_mode, and,
-// like MakersMCP's guard, refuses a concat list.
+// like MakersMCP's guard, refuses a concat list. It takes -vsync, as 4.4
+// does, and gives the ffmpeg under it -fps_mode in its place where that
+// one has no -vsync, as 9.0 has none.
 function ffmpeg44(name) {
   const real = spawnSync("sh", ["-c", "command -v ffmpeg"], { encoding: "utf8" }).stdout.trim();
   const fake = path.join(h.dir, name, "ffmpeg");
   fs.mkdirSync(path.dirname(fake), { recursive: true });
-  fs.writeFileSync(fake, `#!/bin/sh\nfor a in "$@"; do\n  case "$a" in\n    -version) echo "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers"; exit 0 ;;\n    -fps_mode*) echo "Unrecognized option '\${a#-}'." >&2; exit 1 ;;\n    concat) echo "concat is not on the format whitelist" >&2; exit 1 ;;\n  esac\ndone\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  const vsync = h.VSYNC ? "" : 'for a in "$@"; do\n  shift\n  if [ "$a" = "-vsync" ]; then set -- "$@" -fps_mode; else set -- "$@" "$a"; fi\ndone\n';
+  fs.writeFileSync(fake, `#!/bin/sh\nfor a in "$@"; do\n  case "$a" in\n    -version) echo "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers"; exit 0 ;;\n    -fps_mode*) echo "Unrecognized option '\${a#-}'." >&2; exit 1 ;;\n    concat) echo "concat is not on the format whitelist" >&2; exit 1 ;;\n  esac\ndone\n${vsync}exec "${real}" "$@"\n`, { mode: 0o755 });
   return fake;
 }
 

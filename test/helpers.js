@@ -22,8 +22,10 @@ function has(name) {
 const hasFfmpeg = has("ffmpeg") && has("ffprobe");
 
 // -fps_mode came in ffmpeg 5.1, in the place of -vsync, which Ubuntu
-// 22.04's 4.4 has: the kit picks one as this does.
-const FPS_MODE = hasFfmpeg && /-fps_mode/.test(spawnSync("ffmpeg", ["-hide_banner", "-h", "full"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).stdout || "");
+// 22.04's 4.4 has: the kit picks one as this does. 9.0 has no -vsync.
+const OPTIONS = hasFfmpeg ? spawnSync("ffmpeg", ["-hide_banner", "-h", "full"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).stdout || "" : "";
+const FPS_MODE = /-fps_mode/.test(OPTIONS);
+const VSYNC = /^-vsync\b/m.test(OPTIONS);
 const fpsMode = (mode) => (FPS_MODE ? ["-fps_mode", mode] : ["-vsync", mode]);
 
 function ffmpeg(args) {
@@ -170,4 +172,4 @@ function run(args, options = {}) {
   return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", timeout: 600_000, ...options });
 }
 
-module.exports = { dir, CLI, FIXTURES, hasFfmpeg, fpsMode, ffmpeg, video, vfrVideo, jitterVideo, frameTimes, probe, audioMd5, region, colorFrames, write, fontKit, brandKit, evenWords, run };
+module.exports = { dir, CLI, FIXTURES, hasFfmpeg, VSYNC, fpsMode, ffmpeg, video, vfrVideo, jitterVideo, frameTimes, probe, audioMd5, region, colorFrames, write, fontKit, brandKit, evenWords, run };
