@@ -898,11 +898,10 @@ const fontsFolder = (look, dir) => (look.from === "fonts.css" && look.faces.leng
 // start as a font file does, which the kit's own measuring passes over
 // too, is no font libass can use, and is left out, as is one that cannot
 // be read (see notFont). `left` gives each such file with why, [{ file,
-// why }]. libass
-// passes over a file whose name starts with a dot, and names one it cannot
-// open by its name, which a line break cuts in two and in which ffmpeg
-// writes other control characters as ?, so such a file goes in as font,
-// with its extension.
+// why }]. libass passes over a file whose name starts with a dot, and
+// names one it cannot open by its name, which a line break cuts in two and
+// in which ffmpeg writes other control characters as ?, so such a file
+// goes in as font, with its extension.
 function fontsOfLook(look, work) {
   const names = new Map();
   const left = [];

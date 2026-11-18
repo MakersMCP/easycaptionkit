@@ -344,16 +344,13 @@ function headOf(file) {
   }
 }
 
-// Why a file is none loadFont would read, as words that follow its name
-// (see headOf), or "" for a file of no more than MOST bytes that starts as
-// a font file does.
+// Why a file is not one loadFont would read, as words that follow its
+// name (see headOf), or "" for a file of no more than MOST bytes that
+// starts as a font file does.
 function notFont(file) {
   const { head, why } = headOf(file);
   return why || (KINDS.has(head) ? "" : "does not start as a font file does");
 }
-
-// Whether a file is one loadFont would read.
-const fontLike = (file) => !notFont(file);
 
 // Whether a font file starts as a WOFF2 file does.
 const woff2Like = (file) => headOf(file).head === "wOF2";
@@ -369,4 +366,4 @@ function assScale(font) {
   return height > 0 ? height / font.unitsPerEm : 0;
 }
 
-module.exports = { readFont, loadFont, assScale, fontLike, notFont, woff2Like };
+module.exports = { readFont, loadFont, assScale, notFont, woff2Like };

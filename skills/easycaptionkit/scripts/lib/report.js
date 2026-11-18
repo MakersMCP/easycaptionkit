@@ -171,12 +171,12 @@ function assFontText(f) {
 // Where a font of fonts.css is, which is on no machine's list of fonts,
 // for the captions.ass row of a table: its folder, from the folder of
 // captions.ass, and the ass filter that is given that folder as its
-// fontsdir, run there. Whether libass draws the font from that folder is
-// this ffmpeg's to say, as one whose FreeType reads no WOFF2 opens none of
-// the WOFF2 files easyfontkit saves (the README's Limits), and the row says
-// nothing of it. libass passes over a file whose name starts with a dot in
-// a folder, so where captions.ass draws with such a file the row gives the
-// folder alone. A player needs the font installed.
+// fontsdir, run there. Whether the filter draws the font from that folder
+// depends on the ffmpeg that runs it, as one whose FreeType reads no WOFF2
+// opens none of the WOFF2 files easyfontkit saves (the README's Limits),
+// so the row says nothing of it. libass passes over a file whose name
+// starts with a dot in a folder, so where captions.ass draws with such a
+// file the row gives the folder alone. A player needs the font installed.
 function fontsWhere(f) {
   if (!f.assFonts) return "";
   const cell = (text) => code(shown(text)).replace(/\|/g, "\\|");

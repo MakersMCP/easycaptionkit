@@ -884,12 +884,12 @@ async function libassFollows(bins, dir, caps) {
 // reads no WOFF2 file, and the files easyfontkit saves are WOFF2 files
 // where the site's are. So libass is asked once, in the folder `dir`, with
 // the fonts folder the burn gives it and nothing to draw, and says what it
-// could not use as its filter starts. An ffmpeg
-// that ends otherwise than with code 0 and names no file may have ended
-// before that, as it opens its input first, so it stops the run with how
-// it ended, as the burn would: one built without its lavfi device says
-// "Unknown input format: 'lavfi'". So does one that cannot be started, or
-// prints nothing for two minutes.
+// could not use as its filter starts. An ffmpeg that ends otherwise than
+// with code 0 and names no file may have ended before that, as it opens
+// its input first, so it stops the run with how it ended, as the burn
+// would: one built without its lavfi device says "Unknown input format:
+// 'lavfi'". So does one that cannot be started, or prints nothing for two
+// minutes.
 async function libassUnopened(bins, dir, fontsDir, names) {
   if (!names.length) return [];
   const file = path.join(dir, "fonts.ass");
