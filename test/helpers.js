@@ -154,6 +154,27 @@ function fontKit(name, { family = "Inter", status = "open" } = {}) {
   return folder;
 }
 
+// Whether this ffmpeg's libass draws the Inter fixture from a fonts folder,
+// by what libass says at -loglevel debug of the font it picks: one it read
+// from the folder goes by its name alone, one of the machine's by its path.
+// The static builds BtbN makes, the hosted worker's 9.0.2 among them, have
+// a FreeType that reads no WOFF2 file, so their libass picks a font of the
+// machine's.
+let takesWoff2 = null;
+function libassTakesWoff2() {
+  if (takesWoff2 !== null) return takesWoff2;
+  const folder = path.join(dir, "libass-woff2");
+  fs.mkdirSync(path.join(folder, "fonts"), { recursive: true });
+  fs.copyFileSync(path.join(FIXTURES, "inter-latin-400.woff2"), path.join(folder, "fonts", "inter-latin-400.woff2"));
+  fs.writeFileSync(
+    path.join(folder, "inter.ass"),
+    "[Script Info]\nScriptType: v4.00+\nPlayResX: 64\nPlayResY: 64\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: C,Inter,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,C,,0,0,0,,Hi\n",
+  );
+  const r = spawnSync("ffmpeg", ["-hide_banner", "-nostdin", "-loglevel", "debug", "-f", "lavfi", "-i", "color=c=black:s=64x64:r=1:d=1", "-vf", "ass=filename=inter.ass:fontsdir=fonts", "-frames:v", "1", "-f", "null", "-"], { cwd: folder, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  takesWoff2 = /fontselect: \(Inter, 400, 0\) -> Inter-Regular,/.test(r.stderr || "");
+  return takesWoff2;
+}
+
 // A brand kit like easybrandkit's.
 function brandKit(name, colors) {
   const folder = path.join(dir, name);
@@ -172,4 +193,4 @@ function run(args, options = {}) {
   return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", timeout: 600_000, ...options });
 }
 
-module.exports = { dir, CLI, FIXTURES, hasFfmpeg, VSYNC, fpsMode, ffmpeg, video, vfrVideo, jitterVideo, frameTimes, probe, audioMd5, region, colorFrames, write, fontKit, brandKit, evenWords, run };
+module.exports = { dir, CLI, FIXTURES, hasFfmpeg, VSYNC, fpsMode, ffmpeg, video, vfrVideo, jitterVideo, frameTimes, probe, audioMd5, region, colorFrames, write, fontKit, libassTakesWoff2, brandKit, evenWords, run };

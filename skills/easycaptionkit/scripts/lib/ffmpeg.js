@@ -875,6 +875,46 @@ async function libassFollows(bins, dir, caps) {
   return answer;
 }
 
+// The font files of the folder `fontsDir` that this ffmpeg's libass cannot
+// open, as [{ name, line }]: each of `names`, the files the kit put there,
+// that libass says it could not open, and the words it said it in. libass
+// then draws a font of the machine's in its place, and says so only at a
+// level -loglevel error leaves out: the static builds of ffmpeg BtbN makes
+// have a FreeType that reads no WOFF2 file, the files easyfontkit saves.
+// So libass is asked once, in the folder `dir`, with the fonts folder the
+// burn gives it and nothing to draw: it reads every file there as it
+// starts, before anything else it does can fail, and what it said is read
+// however the run ended. One that cannot be started, or prints nothing for
+// two minutes, says nothing of the fonts, and stops the run as the burn
+// would.
+async function libassUnopened(bins, dir, fontsDir, names) {
+  if (!names.length) return [];
+  const file = path.join(dir, "fonts.ass");
+  // libass 0.15, Ubuntu 22.04's, makes no track of a file without styles.
+  fs.writeFileSync(file, "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n");
+  try {
+    const result = await run(bins.ffmpeg, ["-hide_banner", "-nostdin", "-loglevel", "warning", "-f", "lavfi", "-i", "color=c=black:s=16x16:r=1:d=1", "-vf", libassFilter("fonts.ass", fontsDir), "-frames:v", "1", "-f", "null", "-"], { cwd: dir });
+    return unopenedOf(result.stderr, names);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+}
+
+// Which of the font files `names` libass said it could not open, in what
+// ffmpeg printed, `stderr`: as libass 0.15 to 0.17 say it, "Error opening
+// memory font 'inter.woff2'", once for each time ffmpeg starts the filter,
+// read by the words after the "[Parsed_ass_0 @ 0x...]" that starts the
+// line. [{ name, line }], with those words.
+function unopenedOf(stderr, names) {
+  const said = new Map();
+  for (const line of String(stderr || "").split(/\r?\n|\r/)) {
+    const words = line.replace(/^(?:\[[^\]]*\]\s*)+/, "").trim();
+    const m = /^Error opening memory font '(.*)'$/.exec(words);
+    if (m) said.set(m[1], words);
+  }
+  return names.filter((name) => said.has(name)).map((name) => ({ name, line: said.get(name) }));
+}
+
 // How libass draws a video's captions, from colorOf's colors and whether
 // the ass filter follows the matrix it is told (libassFollows): { header,
 // matrix, tint, full }. header is the burn's YCbCr Matrix line and matrix
@@ -1038,4 +1078,4 @@ async function frameAt(bins, file, t, output, { width = 0, retag = "", untag = "
   return output;
 }
 
-module.exports = { FFMPEG, FFPROBE, ready, readyProbe, onPath: programs.onPath, probe, readVideo, packetsOf, frameTimes, rateOf, steadyRate, fillFor, capabilities, burn, frameAt, run, whyFailed, optionNames, colorOf, prepareChain, filterPath, libassFilter, hdrLevel, fineBase, matrixLine, as601, libassFollows, assColors, pixelFormat };
+module.exports = { FFMPEG, FFPROBE, ready, readyProbe, onPath: programs.onPath, probe, readVideo, packetsOf, frameTimes, rateOf, steadyRate, fillFor, capabilities, burn, frameAt, run, whyFailed, optionNames, colorOf, prepareChain, filterPath, libassFilter, hdrLevel, fineBase, matrixLine, as601, libassFollows, libassUnopened, unopenedOf, assColors, pixelFormat };

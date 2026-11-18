@@ -323,23 +323,30 @@ function loadFont(file, index = 0, budget = Infinity) {
 // TrueType or OpenType.
 const KINDS = new Set(["wOF2", "wOFF", "ttcf", "\u0000\u0001\u0000\u0000", "OTTO", "true"]);
 
-// Whether a file is one loadFont would read: a file of no more than MOST
-// bytes that starts as a font file does. Only its first four bytes are
-// read, so a video named as a font is not.
-function fontLike(file) {
+// The first four bytes of a file of no more than MOST bytes, as text, or
+// "" for anything else. Only they are read, so a video named as a font is
+// not.
+function headOf(file) {
   let fd;
   try {
     const stat = fs.statSync(file);
-    if (!stat.isFile() || stat.size > MOST) return false;
+    if (!stat.isFile() || stat.size > MOST) return "";
     fd = fs.openSync(file, "r");
     const head = Buffer.alloc(4);
-    return fs.readSync(fd, head, 0, 4, 0) === 4 && KINDS.has(tag(head, 0));
+    return fs.readSync(fd, head, 0, 4, 0) === 4 ? tag(head, 0) : "";
   } catch {
-    return false;
+    return "";
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
   }
 }
+
+// Whether a file is one loadFont would read: a file of no more than MOST
+// bytes that starts as a font file does.
+const fontLike = (file) => KINDS.has(headOf(file));
+
+// Whether a font file starts as a WOFF2 file does.
+const woff2Like = (file) => headOf(file) === "wOF2";
 
 // The ASS font size for a font whose em is one pixel. libass, as VSFilter
 // does, makes the font as tall as its OS/2 winAscent and winDescent: an
@@ -352,4 +359,4 @@ function assScale(font) {
   return height > 0 ? height / font.unitsPerEm : 0;
 }
 
-module.exports = { readFont, loadFont, assScale, fontLike };
+module.exports = { readFont, loadFont, assScale, fontLike, woff2Like };

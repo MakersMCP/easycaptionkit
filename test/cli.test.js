@@ -1009,9 +1009,10 @@ test("the fix-a-word command CAPTIONS.md gives for subtitles names the video and
 test("the flags CAPTIONS.md gives a captioning run to fix a word, and the free font's --font, are code, so copied to the end of their line and run they fix the captions in the same folder and name the font as it is", { skip: (!hasFfmpeg && "needs ffmpeg") || (process.platform === "win32" && "needs a POSIX shell") }, function () {
   const { spawnSync } = require("node:child_process");
   const { findChrome } = require("../skills/easycaptionkit/scripts/lib/chrome");
-  const libass = / ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout);
-  if (!libass && !findChrome()) return this.skip("needs libass or Chrome");
-  const { fontKit } = require("./helpers");
+  const { fontKit, libassTakesWoff2 } = require("./helpers");
+  // A libass that opens no WOFF2 file stops a run with the kit's font before it draws.
+  const libass = / ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout) && libassTakesWoff2();
+  if (!libass && !findChrome()) return this.skip("needs libass that opens WOFF2 files, or Chrome");
   const work = path.join(dir, "fix-caption");
   fs.mkdirSync(work, { recursive: true });
   fs.copyFileSync(video({ width: 320, height: 568, seconds: 2 }), path.join(work, "clip.mp4"));

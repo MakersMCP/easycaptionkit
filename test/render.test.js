@@ -629,7 +629,7 @@ test("a video of a few pixels is captioned, and one too small for letters a pixe
   assert.match(subs.stderr, /The video is 2x2, too small for captions/);
 });
 
-test("libass burns a fonts.css font that fonts.css calls otherwise than its file does, found by the name in the file", { skip }, function () {
+test("libass burns a fonts.css font that fonts.css calls otherwise than its file does, found by the name in the file, and where this ffmpeg's libass cannot open the file, the run stops before it draws and says so", { skip }, function () {
   if (!/ subtitles /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
   // easyfontkit names a family as people write it, so InterVariable's file is Inter in fonts.css; here Inter's file is Kit Inter.
   const kit = h.fontKit("kit-renamed", { family: "Kit Inter" });
@@ -637,6 +637,15 @@ test("libass burns a fonts.css font that fonts.css calls otherwise than its file
   const words = h.write("renamed.json", { words: h.evenWords("found by its own name", { start: 0.2 }) });
   const folder = out("renamed-libass");
   const r = h.run([video, "--words", words, "--fonts", kit, "--libass", "--style", "line", "--out", folder]);
+  if (!h.libassTakesWoff2()) {
+    // As on the hosted worker's static 9.0.2, whose libass drew Noto Sans in its place while the run named Inter.
+    assert.equal(r.status, 1, r.stdout);
+    assert.equal(r.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot open files/inter-latin-400.woff2, a font file fonts.css gives for Kit Inter: it said \"Error opening memory font 'inter-latin-400.woff2'\". Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2");
+    assert.doesNotMatch(r.stderr, /Drawing/);
+    assert.equal(r.stdout, "");
+    assert.equal(fs.existsSync(folder), false);
+    return;
+  }
   assert.equal(r.status, 0, r.stderr);
   const ass = path.join(folder, "captions.ass");
   assert.match(fs.readFileSync(ass, "utf8"), /^Style: Caption,Inter,/m);
@@ -654,17 +663,32 @@ test("libass is given a fonts folder of the look's own font files alone, not the
   // A fonts.css made elsewhere, next to its font and another big file.
   const kit = h.fontKit("kit-crowded");
   fs.writeFileSync(path.join(kit, "files", "recording.mov"), Buffer.alloc(1 << 20));
-  // An ffmpeg that lists the folder each ass filter is given as its fonts folder, as the burn runs.
+  // An ffmpeg that lists the folder each ass filter is given as its fonts folder, as the burn runs, and notes each run
+  // at -loglevel warning, the one that asks libass which font files it opens.
   const real = spawnSync("sh", ["-c", "command -v ffmpeg"], { encoding: "utf8" }).stdout.trim();
   const fake = path.join(h.dir, "fontsdir-bin", "ffmpeg");
   const listed = path.join(h.dir, "fontsdir-bin", "listed");
+  const asked = path.join(h.dir, "fontsdir-bin", "asked");
   fs.mkdirSync(path.dirname(fake), { recursive: true });
-  fs.writeFileSync(fake, `#!/bin/sh\nfor a in "$@"; do\n  case "$a" in\n    *fontsdir=*) ls -A "$(printf '%s' "$a" | sed -n 's/.*fontsdir=\\([^:]*\\):.*/\\1/p')" >> "${listed}" ;;\n  esac\ndone\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  fs.writeFileSync(fake, `#!/bin/sh\nfor a in "$@"; do\n  case "$a" in\n    *fontsdir=*) ls -A "$(printf '%s' "$a" | sed -n 's/.*fontsdir=\\([^:]*\\):.*/\\1/p')" >> "${listed}" ;;\n    warning) echo asked >> "${asked}" ;;\n  esac\ndone\nexec "${real}" "$@"\n`, { mode: 0o755 });
   const words = h.write("crowded.json", { words: h.evenWords("only the fonts", { start: 0.2 }) });
-  caption([blackVideo("black-crowded.mp4", { width: 360, height: 640, seconds: 2 }), "--words", words, "--fonts", kit, "--libass", "--out", out("crowded")], { env: { ...process.env, FFMPEG_PATH: fake, CHROME_PATH: "/nonexistent/chrome" } });
-  assert.equal(fs.readFileSync(listed, "utf8"), "inter-latin-400.woff2\n");
+  const env = { env: { ...process.env, FFMPEG_PATH: fake, CHROME_PATH: "/nonexistent/chrome" } };
+  // libass is asked once whether it opens them, then given the same folder for the burn, which a libass that cannot
+  // open the file never reaches.
+  const takes = h.libassTakesWoff2();
+  const burned = (args) => {
+    const r = h.run([...args, "--json"], env);
+    assert.equal(r.status, takes ? 0 : 1, r.stderr);
+    return takes ? JSON.parse(r.stdout) : null;
+  };
+  burned([blackVideo("black-crowded.mp4", { width: 360, height: 640, seconds: 2 }), "--words", words, "--fonts", kit, "--libass", "--out", out("crowded")]);
+  assert.equal(fs.readFileSync(listed, "utf8"), "inter-latin-400.woff2\n".repeat(takes ? 2 : 1));
+  assert.equal(fs.readFileSync(asked, "utf8"), "asked\n");
   // CAPTIONS.md still gives the kit's own folder, where the font stays.
-  assert.match(fs.readFileSync(path.join(out("crowded"), "CAPTIONS.md"), "utf8"), /fontsdir=/);
+  if (takes) assert.match(fs.readFileSync(path.join(out("crowded"), "CAPTIONS.md"), "utf8"), /fontsdir=/);
+  // A run whose font is the machine's gives libass no folder, and asks it nothing.
+  caption([blackVideo("black-crowded.mp4", { width: 360, height: 640, seconds: 2 }), "--words", words, "--libass", "--out", out("crowded-machine")], env);
+  assert.equal(fs.readFileSync(asked, "utf8"), "asked\n");
   // A fonts.css that names that recording for one face, and for another a file past 64 MB that starts as a WOFF2 file
   // does: neither is a font the kit's measuring takes, and neither goes in the folder libass reads whole.
   const named = h.fontKit("kit-named");
@@ -674,13 +698,43 @@ test("libass is given a fonts folder of the look's own font files alone, not the
   fs.truncateSync(huge, 65 * 1024 * 1024);
   fs.appendFileSync(path.join(named, "fonts.css"), `@font-face {\n  font-family: "Inter";\n  src: url("files/recording.mov") format("woff2");\n  font-weight: 400;\n  font-style: italic;\n}\n\n@font-face {\n  font-family: "Inter";\n  src: url("files/huge.woff2") format("woff2");\n  font-weight: 700;\n  font-style: normal;\n}\n`);
   fs.rmSync(listed, { force: true });
-  const c = caption([blackVideo("black-crowded.mp4", { width: 360, height: 640, seconds: 2 }), "--words", words, "--fonts", named, "--libass", "--out", out("named")], { env: { ...process.env, FFMPEG_PATH: fake, CHROME_PATH: "/nonexistent/chrome" } });
-  assert.deepEqual(c.look.files, ["files/inter-latin-400.woff2", "files/recording.mov", "files/huge.woff2"]);
-  assert.equal(fs.readFileSync(listed, "utf8"), "inter-latin-400.woff2\n");
+  const c = burned([blackVideo("black-crowded.mp4", { width: 360, height: 640, seconds: 2 }), "--words", words, "--fonts", named, "--libass", "--out", out("named")]);
+  if (takes) assert.deepEqual(c.look.files, ["files/inter-latin-400.woff2", "files/recording.mov", "files/huge.woff2"]);
+  assert.equal(fs.readFileSync(listed, "utf8"), "inter-latin-400.woff2\n".repeat(takes ? 2 : 1));
+});
+
+test("a font file of fonts.css that libass cannot open stops a --libass run before it draws, with each such file as fonts.css names it, a name that starts with a dot or holds a line break too, what libass said and what to do", { skip: !h.hasFfmpeg && "needs ffmpeg" }, function () {
+  if (!/ ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
+  const video = blackVideo("black-unopened.mp4", { width: 360, height: 640, seconds: 2 });
+  const words = h.write("unopened.json", { words: h.evenWords("not in that font", { start: 0.2 }) });
+  const env = { env: { ...process.env, CHROME_PATH: "/nonexistent/chrome" } };
+  // Next to Inter's file, a bold that starts as WOFF2 and is no font, by a name libass passes over in a folder, and an
+  // italic that starts as TrueType and is no font, by a name with a line break, which would cut libass's line in two.
+  const kit = h.fontKit("kit-unopened");
+  fs.writeFileSync(path.join(kit, "files", ".bold.woff2"), Buffer.concat([Buffer.from("wOF2"), Buffer.alloc(60)]));
+  fs.writeFileSync(path.join(kit, "files", "cut\nshort.ttf"), Buffer.concat([Buffer.from([0, 1, 0, 0]), Buffer.alloc(60)]));
+  fs.appendFileSync(path.join(kit, "fonts.css"), '@font-face {\n  font-family: "Inter";\n  src: url("files/.bold.woff2") format("woff2");\n  font-weight: 700;\n  font-style: normal;\n}\n\n@font-face {\n  font-family: "Inter";\n  src: url("files/cut%0Ashort.ttf") format("truetype");\n  font-weight: 400;\n  font-style: italic;\n}\n');
+  const r = h.run([video, "--words", words, "--fonts", kit, "--libass", "--out", out("unopened"), "--json"], env);
+  assert.equal(r.status, 1, r.stdout);
+  // A libass that opens no WOFF2 file cannot open Inter's either, and says so first.
+  const which = h.libassTakesWoff2() ? "files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter: it said \"Error opening memory font 'font.woff2'\"" : "files/inter-latin-400.woff2, files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter: it said \"Error opening memory font 'inter-latin-400.woff2'\"";
+  const message = `This ffmpeg's libass cannot open ${which}. Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2`;
+  assert.deepEqual(JSON.parse(r.stdout), { ok: false, error: message });
+  assert.equal(r.stderr, `easycaptionkit: ${message}\n`);
+  assert.equal(fs.existsSync(out("unopened")), false);
+  // A file libass cannot open that is no WOFF2 file is no question of which files ffmpeg's FreeType reads.
+  const cut = h.fontKit("kit-cut");
+  fs.writeFileSync(path.join(cut, "files", "cut.ttf"), Buffer.concat([Buffer.from([0, 1, 0, 0]), Buffer.alloc(60)]));
+  fs.writeFileSync(path.join(cut, "fonts.css"), '@font-face {\n  font-family: "Inter";\n  src: url("files/cut.ttf") format("truetype");\n  font-weight: 700;\n  font-style: normal;\n}\n');
+  const c = h.run([video, "--words", words, "--fonts", cut, "--libass", "--out", out("cut-font")], env);
+  assert.equal(c.status, 1, c.stdout);
+  assert.equal(c.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot open files/cut.ttf, a font file fonts.css gives for Inter: it said \"Error opening memory font 'cut.ttf'\". Leave out --libass to have Chrome draw the captions, or give fonts.css a file of the font that libass opens");
+  assert.equal(fs.existsSync(out("cut-font")), false);
 });
 
 test("libass says a variable file's letters are thin only where that file draws letters, and the summary names the fonts captions.ass sets the others in", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform !== "linux" && "needs fontconfig" }, function () {
   if (!/ ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
+  if (!h.libassTakesWoff2()) return this.skip("this ffmpeg's libass opens no WOFF2 file, so a run with the WOFF2 of fonts.css stops before it draws");
   // Inter's file, given in fonts.css as one of the weights 100 to 900.
   const kit = h.fontKit("kit-variable");
   fs.writeFileSync(path.join(kit, "fonts.css"), fs.readFileSync(path.join(kit, "fonts.css"), "utf8").replace("font-weight: 400;", "font-weight: 100 900;"));
@@ -1586,6 +1640,32 @@ test("why ffmpeg refused its arguments: the option it does not know, not the lin
     assert.match(said, /\nError splitting the argument list: Option not found\n$/, version);
     assert.equal(whyFailed({ code, signal: null, stderr: said }), `Unrecognized option '${option}'.`, version);
   }
+});
+
+test("which font files libass could not open, in what 4.4, 8.0 and 9.0 printed: each by the words after the name of the filter, once however often it says so, and the WOFF2 file only on the static 9.0.2", () => {
+  const { unopenedOf } = require("../skills/easycaptionkit/scripts/lib/ffmpeg");
+  // libass asked as a run asks it at -loglevel warning, of a fonts folder with Inter's WOFF2 and a file that starts as
+  // WOFF2 and is no font: Ubuntu 22.04's 4.4.2 starts the filter once, this machine's 8.0.1 and the hosted worker's
+  // 9.0.2 twice, and 9.0.2 opens neither file.
+  const names = ["inter-latin-400.woff2", "broken.woff2"];
+  for (const [version, unopened] of [["4.4", ["broken.woff2"]], ["8.0", ["broken.woff2"]], ["9.0", names]]) {
+    const said = fs.readFileSync(path.join(h.FIXTURES, "stderr", `libass-fonts-${version}.txt`), "utf8");
+    assert.match(said, /^\[Parsed_ass_0 @ 0x[0-9a-f]+\] Error opening memory font 'broken\.woff2'$/m, version);
+    assert.deepEqual(unopenedOf(said, names), unopened.map((name) => ({ name, line: `Error opening memory font '${name}'` })), version);
+  }
+  // A file the run did not give libass, and a line that only starts as libass's, are none it could not open.
+  assert.deepEqual(unopenedOf("[Parsed_ass_0 @ 0x1] Error opening memory font 'other.woff2'\n[Parsed_ass_0 @ 0x1] Error opening memory font 'broken.woff2' twice\n", names), []);
+});
+
+test("an ffmpeg that cannot be started when libass is to be asked which font files it opens stops the run there with what the system said, where the run went on as if libass had opened them all, and the file it was to read goes", async () => {
+  const { libassUnopened } = require("../skills/easycaptionkit/scripts/lib/ffmpeg");
+  const work = out("unopened-unstarted");
+  fs.mkdirSync(path.join(work, "fonts"), { recursive: true });
+  fs.copyFileSync(path.join(h.FIXTURES, "inter-latin-400.woff2"), path.join(work, "fonts", "inter-latin-400.woff2"));
+  // An ffmpeg taken away after the run checked it.
+  const gone = path.join(work, "gone", "ffmpeg");
+  await assert.rejects(libassUnopened({ ffmpeg: gone }, work, path.join(work, "fonts"), ["inter-latin-400.woff2"]), { message: `easycaptionkit could not start ffmpeg, ${gone}, again: no such file or directory. Check that it is still there and may be run, and run easycaptionkit again.` });
+  assert.deepEqual(fs.readdirSync(work), ["fonts"]);
 });
 
 test("why ffmpeg failed: the line that names the filter or option, not the closing lines after it, and the signal that stopped it, as SIGKILL when memory runs out, or the SIGTERM it took itself and ended with 255 for", { skip: (!h.hasFfmpeg && "needs ffmpeg") || (process.platform === "win32" && "needs a shell script for ffmpeg") }, function () {

@@ -16,7 +16,8 @@ const { srt, vtt, ass, assFont, kitLetters, estimatedScales, shrunkOf, assLetter
 const { machineLetters, chromeBoxes, boxesIn } = require("./boxes");
 const { captionLayout, charsThatFit, defaultPlaces, shapeOf } = require("./places");
 const { chooseLook, variableFace, machineFont, fallbackFont } = require("./look");
-const { fontLike } = require("./fontfile");
+const { fontLike, woff2Like } = require("./fontfile");
+const { quoted } = require("./programs");
 const ffmpeg = require("./ffmpeg");
 const { chromeReady, chromeProblem, tempProblem } = require("./chrome");
 const { renderStates } = require("./render");
@@ -887,23 +888,30 @@ const boxesNotes = (boxes) => (boxes.length ? [`${boxesText(boxes, "chrome")} ${
 // folder `dir`, where captions.ass is; else "".
 const fontsFolder = (look, dir) => (look.from === "fonts.css" && look.faces.length ? path.relative(path.resolve(dir), path.dirname(look.faces[0].file)) || "." : "");
 
-// The folder ffmpeg's ass filter finds the look's font files in: a folder
-// of the work folder that holds those files alone, each linked, or copied
-// where no link can be made, or "" when the look has none. libass reads
+// The folder ffmpeg's ass filter finds the look's font files in, { dir,
+// names }: a folder of the work folder that holds those files alone, each
+// linked, or copied where no link can be made, and the name each has there
+// with the file it is, or no folder when the look has none. libass reads
 // every file of the folder it is given into memory, and the folder of a
 // fonts.css made elsewhere can hold any file next to its fonts, which that
 // fonts.css can name too: a file past 64 MB, or one that does not start as
 // a font file does, which the kit's own measuring passes over too, is no
-// font libass can use, and is left out.
+// font libass can use, and is left out. libass passes over a file whose
+// name starts with a dot, and names one it cannot open by its name, which
+// a line break cuts in two and in which ffmpeg writes other control
+// characters as ?, so such a file goes in as font, with its extension.
 function fontsOfLook(look, work) {
-  if (!look.faces.length) return "";
+  const names = new Map();
+  if (!look.faces.length) return { dir: "", names };
   const dir = path.join(work, "fonts");
   fs.mkdirSync(dir);
   const taken = new Set();
   for (const file of new Set(look.faces.map((f) => f.file))) {
     if (!fontLike(file)) continue;
-    let name = path.basename(file);
-    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${n}-${path.basename(file)}`;
+    const own = path.basename(file);
+    const base = /^\.|[\u0000-\u001f]/.test(own) ? `font${/^\.\w+$/.test(path.extname(own)) ? path.extname(own) : ""}` : own;
+    let name = base;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${n}-${base}`;
     taken.add(name.toLowerCase());
     try {
       fs.linkSync(file, path.join(dir, name));
@@ -912,10 +920,24 @@ function fontsOfLook(look, work) {
         fs.copyFileSync(file, path.join(dir, name));
       } catch {
         // A file that cannot be read is no font libass can use.
+        continue;
       }
     }
+    names.set(name, file);
   }
-  return dir;
+  return { dir, names };
+}
+
+// What a run says of the font files of the look this ffmpeg's libass
+// cannot open, [{ file, line }] (see libassUnopened): which, by the names
+// fonts.css gives them, what libass said of the first, and what to do. A
+// WOFF2 file opens where ffmpeg's FreeType reads WOFF2, and Chrome reads
+// WOFF2.
+function unopenedText(look, unopened) {
+  const names = unopened.map((u) => shown(look.faces.find((f) => f.file === u.file).name));
+  const which = names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : list(names);
+  const ways = unopened.some((u) => woff2Like(u.file)) ? "give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2" : "or give fonts.css a file of the font that libass opens";
+  return `This ffmpeg's libass cannot open ${which}, ${names.length === 1 ? "a font file" : "font files"} fonts.css gives for ${look.family}: it said ${quoted(unopened[0].line)}. Leave out --libass to have Chrome draw the captions, ${ways}`;
 }
 
 // What fontconfig gives for a letter the font of captions.ass lacks, for
@@ -1042,12 +1064,16 @@ async function captionVideo(videoFile, options) {
     const progress = (share) => log(encodingLine(share));
     const unit = options.style === "word" ? ["word", "words"] : ["caption", "captions"];
     if (useLibass) {
+      // A font file of the look that libass cannot open stops the run before
+      // anything is drawn, as libass would draw another font in its place.
+      const fonts = fontsOfLook(look, run.work);
+      const unopened = await ffmpeg.libassUnopened(bins, run.work, fonts.dir, [...fonts.names.keys()]);
+      if (unopened.length) throw new Error(unopenedText(look, unopened.map((u) => ({ file: fonts.names.get(u.name), line: u.line }))));
       log(`Drawing ${count(states.length, "caption state", "caption states")} with libass`);
       // libass measures nothing it is given: a line that by the estimate is
       // wider than the safe space is drawn smaller.
       const scales = estimatedScales(cues, words, { style: options.style, place, font });
       fs.writeFileSync(path.join(run.work, "captions.ass"), assFile(scales));
-      const fontsDir = fontsOfLook(look, run.work);
       // libass draws from a copy whose colors are at the reference white for
       // graphics on HDR, as Chrome's are, and that names the matrix and range
       // the picture has as the ass filter gets it, or, for a filter that
@@ -1060,7 +1086,7 @@ async function captionVideo(videoFile, options) {
         burnAss = path.join(run.work, "burn.ass");
         fs.writeFileSync(burnAss, assFile(scales, { level, matrix: draw.header, tint: draw.tint }));
       }
-      const made = await ffmpeg.burn({ bins, caps, video, output: out, ass: burnAss, assMatrix: draw.matrix, assFull: draw.full, fontsDir, fill, onProgress: progress });
+      const made = await ffmpeg.burn({ bins, caps, video, output: out, ass: burnAss, assMatrix: draw.matrix, assFull: draw.full, fontsDir: fonts.dir, fill, onProgress: progress });
       // A lit color such a filter cannot give as the video's matrix codes it
       // comes out as the nearest it can draw.
       const reach = draw.tint && level >= 1 && options.style !== "line" ? ffmpeg.as601(look.highlight, color.matrix).shown : "";
