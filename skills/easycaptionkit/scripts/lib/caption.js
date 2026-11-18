@@ -945,12 +945,16 @@ function filesOfLook(look, files) {
 }
 
 // What a run says of the font files of the look this ffmpeg's libass
-// cannot use, [{ file, line }] (see libassUnopened): which, what libass
-// said of the first, and what to do. A WOFF2 file opens where ffmpeg's
-// FreeType reads WOFF2, and Chrome reads WOFF2.
+// cannot use, [{ file, name, line }] (see libassUnopened): which, what
+// libass said, and what to do. libass names a file by the name it has in
+// libass's folder (`name`), so its words are given for the first file that
+// went in by its own name, and for none where every one went in by another
+// (see fontsOfLook). A WOFF2 file opens where ffmpeg's FreeType reads WOFF2,
+// and Chrome reads WOFF2; a damaged one opens in neither.
 function unopenedText(look, unopened) {
-  const ways = unopened.some((u) => woff2Like(u.file)) ? "give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2" : "or give fonts.css a file of the font that libass can use";
-  return `This ffmpeg's libass cannot use ${filesOfLook(look, unopened.map((u) => u.file))}: it said ${quoted(unopened[0].line)}. Leave out --libass to have Chrome draw the captions, ${ways}`;
+  const own = unopened.find((u) => u.name === path.basename(u.file));
+  const ways = unopened.some((u) => woff2Like(u.file)) ? "give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does" : "or give fonts.css a file of the font that libass can use";
+  return `This ffmpeg's libass cannot use ${filesOfLook(look, unopened.map((u) => u.file))}${own ? `: it said ${quoted(own.line)}` : ""}. Leave out --libass to have Chrome draw the captions, ${ways}`;
 }
 
 // What a run says of the font files of the look it does not give libass,
@@ -1097,7 +1101,7 @@ async function captionVideo(videoFile, options) {
       if (left.length) throw new Error(leftText(look, left));
       const asked = [...fonts.names].filter(([, file]) => drawing.has(file)).map(([name]) => name);
       const unopened = await ffmpeg.libassUnopened(bins, run.work, fonts.dir, asked);
-      if (unopened.length) throw new Error(unopenedText(look, unopened.map((u) => ({ file: fonts.names.get(u.name), line: u.line }))));
+      if (unopened.length) throw new Error(unopenedText(look, unopened.map((u) => ({ file: fonts.names.get(u.name), name: u.name, line: u.line }))));
       log(`Drawing ${count(states.length, "caption state", "caption states")} with libass`);
       // libass measures nothing it is given: a line that by the estimate is
       // wider than the safe space is drawn smaller.

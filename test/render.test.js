@@ -642,7 +642,7 @@ test("libass burns a fonts.css font that fonts.css calls otherwise than its file
   if (!takes) {
     // As on the hosted worker's static 9.0.2, whose libass drew Noto Sans in its place while the run named Inter.
     assert.equal(r.status, 1, r.stdout);
-    assert.equal(r.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/inter-latin-400.woff2, a font file fonts.css gives for Kit Inter: it said \"Error opening memory font 'inter-latin-400.woff2'\". Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2");
+    assert.equal(r.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/inter-latin-400.woff2, a font file fonts.css gives for Kit Inter: it said \"Error opening memory font 'inter-latin-400.woff2'\". Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does");
     assert.doesNotMatch(r.stderr, /Drawing/);
     assert.equal(r.stdout, "");
     assert.equal(fs.existsSync(folder), false);
@@ -725,8 +725,9 @@ test("a font file of fonts.css that libass cannot open, of a face captions.ass d
   const r = h.run([video, "--words", words, "--fonts", kit, "--libass", "--out", out("unopened"), "--json"], env);
   assert.equal(r.status, 1, r.stdout);
   // The bold's two files, on every ffmpeg: not Inter's 400, which a libass that opens no WOFF2 file cannot open either,
-  // nor the italic.
-  const message = "This ffmpeg's libass cannot use files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter: it said \"Error opening memory font 'font.woff2'\". Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or set FFMPEG_PATH to an ffmpeg whose FreeType reads WOFF2";
+  // nor the italic. libass named them by the names the run gave them in its folder, font.woff2 and font.ttf, which are
+  // no files of the user's, so its words are not given.
+  const message = "This ffmpeg's libass cannot use files/.bold.woff2 and files/cut short.ttf, font files fonts.css gives for Inter. Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does";
   assert.deepEqual(JSON.parse(r.stdout), { ok: false, error: message });
   assert.equal(r.stderr, `easycaptionkit: ${message}\n`);
   assert.equal(fs.existsSync(out("unopened")), false);
@@ -738,6 +739,18 @@ test("a font file of fonts.css that libass cannot open, of a face captions.ass d
   assert.equal(c.status, 1, c.stdout);
   assert.equal(c.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/cut.ttf, a font file fonts.css gives for Inter: it said \"Error opening memory font 'cut.ttf'\". Leave out --libass to have Chrome draw the captions, or give fonts.css a file of the font that libass can use");
   assert.equal(fs.existsSync(out("cut-font")), false);
+  // Past three files, how many more, as for a family a site splits into a file for each set of letters; libass's words
+  // for the first that went to it by its own name.
+  const many = h.fontKit("kit-many");
+  const ranges = ["U+0000-007F", "U+0080-00FF", "U+0100-017F", "U+0180-024F"];
+  ["files/.a.woff2", "files/b.woff2", "files/c.woff2", "files/d.woff2"].forEach((name, n) => {
+    fs.writeFileSync(path.join(many, name), noFont("wOF2"));
+    fs.appendFileSync(path.join(many, "fonts.css"), face(name.slice(6), 700, "normal", ranges[n]));
+  });
+  const m = h.run([video, "--words", words, "--fonts", many, "--libass", "--out", out("many-cut")], env);
+  assert.equal(m.status, 1, m.stdout);
+  assert.equal(m.stderr.split("\n").filter(Boolean).pop(), "easycaptionkit: This ffmpeg's libass cannot use files/.a.woff2, files/b.woff2, files/c.woff2 and 1 more, font files fonts.css gives for Inter: it said \"Error opening memory font 'b.woff2'\". Leave out --libass to have Chrome draw the captions, give fonts.css the font as a TTF or OTF file, or, where this ffmpeg's FreeType reads no WOFF2, as in the static builds of BtbN's FFmpeg-Builds, set FFMPEG_PATH to an ffmpeg whose FreeType does");
+  assert.equal(fs.existsSync(out("many-cut")), false);
   // The italic alone beside Inter's 400, which draws the captions, stops nothing: the run burns that 400, the WOFF2 file
   // a site serves, or the same font as a TrueType file where this ffmpeg's libass opens no WOFF2 file.
   const italic = h.fontKit("kit-italic-cut", { ttf: !h.libassTakesWoff2() });
