@@ -81,8 +81,11 @@ async function readyProbe(limit = programs.LIMIT) {
 // could not start, or that filtering failed, after the scaler said which
 // frame it could not convert. ffmpeg 6.1 says it could not start a simple
 // filtergraph, the one -vf gives, after the line that names the option
-// its filter refused.
+// its filter refused. Every version says it could not split its arguments
+// after the line that names an option it does not know, as 9.0 does of
+// -vsync.
 const CLOSING = [
+  /^Error splitting the argument list\b/,
   /^Could not open encoder before EOF/,
   /^Error while filtering\b/,
   /^Nothing was written into output file/,

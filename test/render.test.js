@@ -1576,6 +1576,18 @@ test("why ffmpeg 6.1 failed: the line that names the option a filter refused, no
   assert.equal(whyFailed({ code: 234, signal: null, stderr: said }), "Error applying option 'framelog' to filter 'ebur128': Invalid argument");
 });
 
+test("why ffmpeg refused its arguments: the option it does not know, not the line after it that says it could not split them, on 4.4, 8.0 and 9.0", () => {
+  const { whyFailed } = require("../skills/easycaptionkit/scripts/lib/ffmpeg");
+  // What each printed at -loglevel error: Ubuntu 22.04's 4.4.2 of -fps_mode, which came in 5.1, this machine's 8.0.1 of
+  // an option no ffmpeg has, and the hosted worker's 9.0.2 of -vsync, which 9.0 took out. 4.4.2 exits with 1, the
+  // others with 8.
+  for (const [version, option, code] of [["4.4", "fps_mode:v", 1], ["8.0", "no_such_option", 8], ["9.0", "vsync", 8]]) {
+    const said = fs.readFileSync(path.join(h.FIXTURES, "stderr", `unrecognized-option-${version}.txt`), "utf8");
+    assert.match(said, /\nError splitting the argument list: Option not found\n$/, version);
+    assert.equal(whyFailed({ code, signal: null, stderr: said }), `Unrecognized option '${option}'.`, version);
+  }
+});
+
 test("why ffmpeg failed: the line that names the filter or option, not the closing lines after it, and the signal that stopped it, as SIGKILL when memory runs out, or the SIGTERM it took itself and ended with 255 for", { skip: (!h.hasFfmpeg && "needs ffmpeg") || (process.platform === "win32" && "needs a shell script for ffmpeg") }, function () {
   const { whyFailed } = require("../skills/easycaptionkit/scripts/lib/ffmpeg");
   // ffmpeg 8 and 4.4 on a color tag setparams does not take.

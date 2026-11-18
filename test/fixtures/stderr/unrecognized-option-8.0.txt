@@ -1,0 +1,2 @@
+Unrecognized option 'no_such_option'.
+Error splitting the argument list: Option not found
