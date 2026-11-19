@@ -1,3 +1,5 @@
+<img src=".github/assets/icon.svg" alt="" width="72" height="72">
+
 # easycaptionkit
 
 Burn captions into a video in the product's own fonts and colors, word by word or line by line, kept clear of the buttons each app puts over a video. easycaptionkit also writes the SRT, VTT and ASS files to go with it.
