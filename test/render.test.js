@@ -818,6 +818,31 @@ test("a font file of fonts.css that libass opens and cannot use, as one with no 
   }
 });
 
+test("a font file of fonts.css that cannot be copied into the run's own fonts folder for libass, as on a full disk, stops a --libass run with what the system said, and the out folder is as it was", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform !== "linux" && "needs unshare" }, function () {
+  if (!/ ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
+  // The out folder on a file system of 600 KB of its own, mounted in a mount namespace of its own, where the run is root
+  // of a user namespace. No link to the font file in the test's own folder can be made from there, so the run copies
+  // it, and a copy of 2 MB does not fit.
+  const mount = out("full-disk");
+  fs.mkdirSync(mount, { recursive: true });
+  const script = 'mount -t tmpfs -o size=600k tmpfs "$1" || exit 99; place=$1; list=$2; shift 2; "$@"; s=$?; ls -A "$place" > "$list"; exit $s';
+  if (spawnSync("unshare", ["-rm", "sh", "-c", script, "sh", mount, out("full-disk.check"), "true"], { encoding: "utf8" }).status !== 0) return this.skip("needs unshare to mount a file system of its own");
+  const video = blackVideo("black-full.mp4", { width: 360, height: 640, seconds: 2 });
+  const words = h.write("full.json", { words: h.evenWords("no room for it", { start: 0.2 }) });
+  // Inter's TrueType file with 2 MB of zeros after it, which is Inter all the same.
+  const kit = h.fontKit("kit-full", { ttf: true });
+  fs.writeFileSync(path.join(kit, "files", "inter-big.ttf"), Buffer.concat([fs.readFileSync(path.join(h.FIXTURES, "inter-latin-400.ttf")), Buffer.alloc(2 * 1024 * 1024)]));
+  fs.writeFileSync(path.join(kit, "fonts.css"), '@font-face {\n  font-family: "Inter";\n  src: url("files/inter-big.ttf") format("truetype");\n  font-weight: 400;\n  font-style: normal;\n}\n');
+  const list = out("full-disk.list");
+  const r = spawnSync("unshare", ["-rm", "sh", "-c", script, "sh", mount, list, process.execPath, h.CLI, video, "--words", words, "--fonts", kit, "--libass", "--style", "line", "--out", path.join(mount, "out")], { encoding: "utf8", timeout: 600_000, env: h.onPath({ CHROME_PATH: "/nonexistent/chrome" }) });
+  assert.equal(r.status, 1, r.stdout);
+  const last = r.stderr.split("\n").filter(Boolean).pop();
+  assert.ok(last.startsWith(`easycaptionkit: ENOSPC: no space left on device, copyfile '${path.resolve(kit, "files", "inter-big.ttf")}' -> '${path.resolve(mount, "out")}${path.sep}`), last);
+  assert.doesNotMatch(r.stderr, /Drawing/);
+  // Nothing of the run is left on that file system.
+  assert.equal(fs.readFileSync(list, "utf8"), "");
+});
+
 test("an ffmpeg that fails or is stopped when libass is asked whether it can use the font files of fonts.css stops the run with how it ended, where the run burned and named the kit's font, and one stopped by SIGKILL is told to run fewer jobs at once alone, as that call reads no video", { skip: !h.hasFfmpeg ? "needs ffmpeg" : process.platform === "win32" && "needs a shell script for ffmpeg" }, function () {
   if (!/ ass /.test(spawnSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout)) return this.skip("this ffmpeg has no libass");
   const video = blackVideo("black-asked.mp4", { width: 360, height: 640, seconds: 2 });
