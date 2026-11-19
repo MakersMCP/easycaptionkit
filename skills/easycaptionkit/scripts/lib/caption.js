@@ -1008,7 +1008,9 @@ async function captionVideo(videoFile, options) {
   const [video, caps] = await Promise.all([ffmpeg.readVideo(videoFile, bins), ffmpeg.capabilities(bins, tools.version)]);
   notStill(video, videoFile);
   if (!caps.encoder) throw new Error("This ffmpeg has no H.264 encoder (libx264, VideoToolbox, OpenH264 or Media Foundation), so it cannot write the captioned MP4");
-  if (useLibass && !caps.libass) throw new Error("This ffmpeg has no libass (its ass filter), so --libass cannot draw the captions. Leave out --libass to draw them with Chrome, or install an ffmpeg built with libass");
+  // Chrome's way last, for where it starts, as for the font files libass
+  // cannot use: a run can come to --libass because Chrome does not start.
+  if (useLibass && !caps.libass) throw new Error("This ffmpeg has no libass (its ass filter), so --libass cannot draw the captions. Install an ffmpeg built with libass, or set FFMPEG_PATH to one. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
   if (!useLibass && !caps.overlay) throw new Error("This ffmpeg has no overlay filter, so it cannot lay the captions over the video");
   const read = await loadWords(options.words);
   const first = firstFormat(read, origin);

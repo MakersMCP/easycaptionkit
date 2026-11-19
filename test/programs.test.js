@@ -601,6 +601,20 @@ test("an ffmpeg that answers its version and then fails or is stopped when asked
   refused(env(noH264), [clip, "--words", words, "--libass"], "This ffmpeg has no H.264 encoder (libx264, VideoToolbox, OpenH264 or Media Foundation), so it cannot write the captioned MP4");
 });
 
+test("an ffmpeg with no libass stops a --libass run before any work, saying first to install one built with libass or set FFMPEG_PATH to one, and to leave out --libass only where Chrome starts here, as a run that came to --libass because Chrome does not start cannot do that", { skip: (!hasFfmpeg && "needs ffmpeg") || (!posix && "the stand-in is a shell script") }, () => {
+  const root = path.join(dir, "no-libass");
+  const refused = refuser(root);
+  const clip = video({ width: 320, height: 240, seconds: 1, sound: "none" });
+  const words = write("no-libass-words.json", { words: evenWords("one two three", { start: 0.1, each: 0.2, gap: 0.05 }) });
+  // ffmpeg as it is, but that lists neither the ass filter nor the subtitles filter, as one built without libass.
+  const ffmpeg = real("ffmpeg");
+  const noLibass = path.join(root, "no-ass", "ffmpeg");
+  fs.mkdirSync(path.dirname(noLibass), { recursive: true });
+  fs.writeFileSync(noLibass, `#!/bin/sh\ncase " $* " in *" -filters "*) ${JSON.stringify(ffmpeg)} "$@" | grep -v -E '^ *[^ ]+ +(ass|subtitles) '; exit 0;; esac\nexec ${JSON.stringify(ffmpeg)} "$@"\n`, { mode: 0o755 });
+  assert.doesNotMatch(spawnSync(noLibass, ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout, /^\s*\S+\s+ass\s/m);
+  refused({ FFMPEG_PATH: noLibass, FFPROBE_PATH: real("ffprobe"), CHROME_PATH: "/nonexistent/chrome" }, [clip, "--words", words, "--libass"], "This ffmpeg has no libass (its ass filter), so --libass cannot draw the captions. Install an ffmpeg built with libass, or set FFMPEG_PATH to one. Where Chrome starts here, leave out --libass to have Chrome draw the captions");
+});
+
 test("a program a run checked that the system cannot start during the work says what the system is short of, or what it said and what to check, and one started in a work folder that is gone says so", { skip: (!hasFfmpeg && "needs ffmpeg") || (!posix && "needs a shell's ffmpeg") }, async () => {
   const ffmpeg = require("../skills/easycaptionkit/scripts/lib/ffmpeg");
   const failure = (code, file = "/opt/ffmpeg/ffprobe") => programs.startFailure(file, Object.assign(new Error(`spawn ${file} ${code}`), { code, errno: -require("node:os").constants.errno[code], syscall: `spawn ${file}` })).message;
