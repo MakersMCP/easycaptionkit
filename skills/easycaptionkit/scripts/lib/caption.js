@@ -1089,12 +1089,14 @@ async function captionVideo(videoFile, options) {
     const progress = (share) => log(encodingLine(share));
     const unit = options.style === "word" ? ["word", "words"] : ["caption", "captions"];
     if (useLibass) {
-      // Where captions.ass sets a letter in the font of fonts.css, a file of
-      // the faces it draws with that libass cannot use, or is not given,
-      // stops the run before anything is drawn, as libass would draw another
-      // font in its place. Where it sets every letter in another font, as
-      // Japanese over a Latin font, and for the faces of other weights and
-      // styles, which captions.ass draws nothing with, libass is not asked.
+      // Where captions.ass sets a letter in the font of fonts.css, a file
+      // fonts.css gives for the weight and style it sets letters in that
+      // libass cannot use, or is not given, stops the run before anything is
+      // drawn, whatever letters the file's unicode-range holds: libass draws
+      // another font in the place of such a file, for the letters fonts.css
+      // gives it for. Where captions.ass sets every letter in another font,
+      // as Japanese over a Latin font, and for the files of other weights and
+      // styles, which it draws nothing with, libass is not asked.
       const fonts = fontsOfLook(look, run.work);
       const drawing = new Set(letters.own > 0 ? facesAt(look).map((f) => f.file) : []);
       const left = fonts.left.filter((l) => drawing.has(l.file));
