@@ -1761,6 +1761,14 @@ test("the README says CAPTIONS.md gives what to do about the boxes of a libass r
   assert.match(letter, /Install a font that has it, such as Noto Sans CJK/);
 });
 
+test("the README's Requirements and Limits say that a font file of fonts.css stops a --libass run where captions.ass sets letters in that font and fonts.css gives the file for their weight and style, so Japanese words over a Latin font kit, which it sets in another font, are not said to stop", () => {
+  const readme = fs.readFileSync(path.resolve(__dirname, "../README.md"), "utf8");
+  // Such a run asks libass nothing and burns on every ffmpeg, though captions.ass sets its letters in the weight and
+  // style fonts.css gives the kit's file for: the font the letters are set in is part of each sentence.
+  assert.ok(readme.includes("With `--libass`, a file of a fonts.css font that libass cannot use, or that easycaptionkit does not give it, as one past 64 MB, stops the run before it draws, with what libass said or why and what to do, where captions.ass sets letters in that font and fonts.css gives that file for the weight and style of those letters, and an ffmpeg that fails or is stopped when libass is asked stops it with how it ended."), "the Requirements");
+  assert.ok(readme.includes("Where captions.ass sets letters in a font of fonts.css, a run with `--libass` asks libass first, and stops where it cannot use a file fonts.css gives for the weight and style of those letters, even one whose unicode-range holds none of the captions' letters, as the file for another script of a family split by unicode-range."), "the Limits");
+});
+
 test("CAPTIONS.md and the summary say what drew the letters when the font asked for is not there or is a variable font libass draws, where the captions reach, and commands that run from where the run was made", () => {
   const { captionsMarkdown, subtitlesMarkdown } = require("../skills/easycaptionkit/scripts/lib/report");
   const { summary } = require("../skills/easycaptionkit/scripts/easycaptionkit");
